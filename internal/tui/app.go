@@ -275,17 +275,28 @@ func (m Model) View() string {
 		detail = detailpane.Render(m.styles, *mr, m.advice[mr.Ref], detailWidth)
 	}
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(listWidth).Render(list),
-		lipgloss.NewStyle().Width(detailWidth).Render(detail),
-	)
-
 	auto := "OFF"
 	if m.autoTriage {
 		auto = "ON"
 	}
 	status := m.styles.Footer.Render(fmt.Sprintf("%s · auto-triage %s", m.status, auto))
 	helpBar := m.help.ShortHelpView(m.keys.ShortHelp())
+
+	// The body fills all vertical space between the tab bar and the footer so
+	// the view occupies the full terminal height and the footer sits at the
+	// bottom. Joining the four regions with "\n" yields exactly the sum of
+	// their heights, so chrome is just the three single-line regions.
+	chrome := lipgloss.Height(tabBar) + lipgloss.Height(status) + lipgloss.Height(helpBar)
+	bodyHeight := m.height - chrome
+	if bodyHeight < 1 {
+		bodyHeight = 1
+	}
+
+	pane := lipgloss.NewStyle().Height(bodyHeight)
+	body := lipgloss.JoinHorizontal(lipgloss.Top,
+		pane.Width(listWidth).Render(list),
+		pane.Width(detailWidth).Render(detail),
+	)
 
 	return strings.Join([]string{tabBar, body, status, helpBar}, "\n")
 }

@@ -45,6 +45,32 @@ func TestFetchResultPopulatesRows(t *testing.T) {
 	}
 }
 
+func TestViewFillsTerminalHeight(t *testing.T) {
+	const h = 24
+	m := newTestModel()
+	m.width, m.height = 100, h
+	reviewMR := mr("g/p!1", "failed")
+	reviewMR.Role = core.RoleReviewRequested
+	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{reviewMR}}))
+	view := updated.(Model).View()
+	lines := strings.Split(view, "\n")
+	if len(lines) != h {
+		t.Errorf("view should fill the full terminal height: got %d lines, want %d", len(lines), h)
+	}
+}
+
+func TestViewFillsHeightWhenEmpty(t *testing.T) {
+	const h = 24
+	m := newTestModel()
+	m.width, m.height = 100, h
+	// No MRs at all -> the body must still pad to full height (footer at bottom).
+	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: nil}))
+	view := updated.(Model).View()
+	if got := len(strings.Split(view, "\n")); got != h {
+		t.Errorf("empty view should still fill height: got %d lines, want %d", got, h)
+	}
+}
+
 func TestToggleAutoTriageKey(t *testing.T) {
 	// With a non-nil analyzer, pressing 'a' from false should flip to true.
 	m := New(config.Default(), nil, "you", mockAnalyzer{}, "/tmp/ignored-state.json")
