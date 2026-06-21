@@ -263,3 +263,39 @@ func TestClaudeReviewerIsErrorNotTreatedAsReview(t *testing.T) {
 		t.Errorf("error should carry claude's message, got %v", res.Err)
 	}
 }
+
+func TestGenerateLogsSkillUsed(t *testing.T) {
+	var lines []string
+	orig := logSink
+	logSink = func(l string) { lines = append(lines, l) }
+	defer func() { logSink = orig }()
+
+	gl := &fakeGitLab{diff: "d"}
+	rv := &fakeReviewer{result: Result{Ref: "g/p!1", Text: "ok",
+		SkillsUsed: []string{"claude-components:mr-review"}, Subagents: 3}}
+	Generate(gl, rv, mr(), "p", Options{Skill: "claude-components:mr-review"})
+
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "OK") || !strings.Contains(joined, "claude-components:mr-review") {
+		t.Errorf("success log should record the skill used: %q", joined)
+	}
+	if !strings.Contains(joined, "subagents=3") {
+		t.Errorf("log should record subagent count: %q", joined)
+	}
+}
+
+func TestGenerateLogsSkillNotInvoked(t *testing.T) {
+	var lines []string
+	orig := logSink
+	logSink = func(l string) { lines = append(lines, l) }
+	defer func() { logSink = orig }()
+
+	gl := &fakeGitLab{diff: "d"}
+	// configured a skill, but reviewer reports none used
+	rv := &fakeReviewer{result: Result{Ref: "g/p!1", Text: "ok"}}
+	Generate(gl, rv, mr(), "p", Options{Skill: "some:skill"})
+
+	if !strings.Contains(strings.Join(lines, "\n"), "NOT INVOKED") {
+		t.Errorf("log should flag a configured-but-unused skill: %q", lines)
+	}
+}

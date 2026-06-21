@@ -19,10 +19,17 @@ func logPath() string {
 // LogPath is the human-facing path to the review log (for status messages).
 func LogPath() string { return logPath() }
 
-// logf appends a timestamped line to the review log, best-effort. Used to record
-// the FULL error text (the status bar truncates), so failures are diagnosable.
-// stamp is passed in because time.Now is fine here (not in the workflow sandbox).
+// logSink writes one formatted log line. Defaults to the file appender; tests
+// swap it to capture output.
+var logSink = appendToFile
+
+// logf records a timestamped line about a review (both successes — for an audit
+// trail of which skill ran — and failures, with the full untruncated error).
 func logf(format string, args ...any) {
+	logSink(fmt.Sprintf(format, args...))
+}
+
+func appendToFile(line string) {
 	p := logPath()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return
@@ -32,5 +39,5 @@ func logf(format string, args ...any) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
+	fmt.Fprintf(f, "%s %s\n", time.Now().Format("2006-01-02 15:04:05"), line)
 }

@@ -102,13 +102,25 @@ func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string, opts Options) R
 		Skill: opts.Skill, PluginDirs: opts.PluginDirs,
 	})
 	res.LocalContext = local && res.Err == nil
+	mode := "diff-only"
+	if local {
+		mode = "local-context dir=" + dir
+	}
 	if res.Err != nil {
 		// The status bar truncates; record the full error + mode for diagnosis.
-		mode := "diff-only"
-		if local {
-			mode = "local-context dir=" + dir
-		}
 		logf("review %s (%s) FAILED: %v", mr.Ref, mode, res.Err)
+	} else {
+		// Audit trail of every successful review: mode + which skill(s) Claude
+		// actually invoked (or "no skill"), and how many subagents it ran.
+		skill := "no skill"
+		if opts.Skill != "" {
+			if len(res.SkillsUsed) > 0 {
+				skill = "skill=" + strings.Join(res.SkillsUsed, ",")
+			} else {
+				skill = "skill=" + opts.Skill + " (CONFIGURED BUT NOT INVOKED)"
+			}
+		}
+		logf("review %s OK (%s, %s, subagents=%d)", mr.Ref, mode, skill, res.Subagents)
 	}
 	return res
 }
