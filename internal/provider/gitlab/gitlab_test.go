@@ -46,6 +46,50 @@ func TestToMRMapsFields(t *testing.T) {
 	}
 }
 
+func TestToMRUnresolvedInversion(t *testing.T) {
+	base := rawMR{
+		References: struct {
+			Full string `json:"full"`
+		}{Full: "g/p!1"},
+	}
+
+	const pat = `([A-Z][A-Z0-9]+-\d+)`
+
+	// BlockingOK=false → Unresolved=true
+	rm := base
+	rm.BlockingOK = false
+	mr := toMR(rm, "me", pat)
+	if !mr.Unresolved {
+		t.Errorf("BlockingOK=false: want Unresolved=true, got false")
+	}
+
+	// BlockingOK=true → Unresolved=false
+	rm2 := base
+	rm2.BlockingOK = true
+	mr2 := toMR(rm2, "me", pat)
+	if mr2.Unresolved {
+		t.Errorf("BlockingOK=true: want Unresolved=false, got true")
+	}
+
+	// Draft via Draft field
+	rm3 := base
+	rm3.Draft = true
+	rm3.WIP = false
+	mr3 := toMR(rm3, "me", pat)
+	if !mr3.Draft {
+		t.Errorf("Draft=true,WIP=false: want Draft=true, got false")
+	}
+
+	// Draft via WIP field
+	rm4 := base
+	rm4.Draft = false
+	rm4.WIP = true
+	mr4 := toMR(rm4, "me", pat)
+	if !mr4.Draft {
+		t.Errorf("Draft=false,WIP=true: want Draft=true, got false")
+	}
+}
+
 func TestParseApprovals(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("testdata", "approvals.json"))
 	if err != nil {

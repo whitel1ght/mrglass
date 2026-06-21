@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dmitry/mrglass/internal/core"
+	"github.com/dmitry/mrglass/internal/provider"
 )
 
 // GitLabProvider implements provider.Provider via the glab CLI.
@@ -192,7 +193,4 @@ func toMR(rm rawMR, me, ticketPattern string) core.MR {
 var _ = core.MR{} // ensure core import used even if signatures change
 
 // compile-time check
-var _ interface {
-	Whoami() (string, error)
-	List(string, int, string) ([]core.MR, error)
-} = (*GitLabProvider)(nil)
+var _ provider.Provider = (*GitLabProvider)(nil)
