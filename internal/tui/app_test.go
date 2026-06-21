@@ -94,6 +94,36 @@ func TestEmptyBeforeLoadShowsLoadingNotNoMatches(t *testing.T) {
 	}
 }
 
+func TestOpenKeyReturnsCommandWithoutSuspending(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 30
+	// Must match the default active section (role == "review_requested") so the
+	// MR is selectable.
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	item.URL = "https://example.com/mr/1"
+	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = updated.(Model)
+	// 'o' on a selected MR must return a (background) command, not nil.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	if cmd == nil {
+		t.Error("pressing 'o' on a selected MR should return an open command")
+	}
+}
+
+func TestOpenErrSurfacedInStatus(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 30
+	updated, _ := m.Update(openErrMsg{err: errTest{}})
+	if !strings.Contains(updated.(Model).status, "could not open browser") {
+		t.Errorf("open error should surface in status, got %q", updated.(Model).status)
+	}
+}
+
+type errTest struct{}
+
+func (errTest) Error() string { return "no opener" }
+
 func TestViewFillsTerminalHeight(t *testing.T) {
 	const h = 24
 	m := newTestModel()

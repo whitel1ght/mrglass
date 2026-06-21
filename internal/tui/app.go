@@ -28,6 +28,7 @@ type fetchResultMsg watch.FetchResult
 type fetchErrMsg struct{ err error }
 type adviceMsg analyze.Advice
 type tickMsg time.Time
+type openErrMsg struct{ err error }
 
 type Model struct {
 	cfg       config.Config
@@ -106,6 +107,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case fetchErrMsg:
 		m.status = "⚠ refresh failed: " + msg.err.Error()
+		return m, nil
+
+	case openErrMsg:
+		m.status = "⚠ could not open browser: " + msg.err.Error()
 		return m, nil
 
 	case fetchResultMsg:
@@ -229,17 +234,31 @@ func (m Model) selected() *core.MR {
 	return nil
 }
 
+// openURL launches the OS browser as a DETACHED background process. It uses a
+// plain tea.Cmd (not tea.ExecProcess) so Bubble Tea keeps control of the screen
+// — ExecProcess suspends the alt-screen and renderer for an interactive child,
+// which for a fire-and-forget opener just causes a visible terminal flash.
 func openURL(url string) tea.Cmd {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
+	return func() tea.Msg {
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("open", url)
+		case "windows":
+			cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		default:
+			cmd = exec.Command("xdg-open", url)
+		}
+		// Detach: the opener returns immediately and we don't want its stdio
+		// touching our TTY. Start (not Run) so we never block the UI loop.
+		if err := cmd.Start(); err != nil {
+			return openErrMsg{err}
+		}
+		// Reap the short-lived process in the background so it isn't a zombie;
+		// we don't care about its result.
+		go func() { _ = cmd.Wait() }()
+		return nil
 	}
-	return tea.ExecProcess(cmd, func(error) tea.Msg { return nil })
 }
 
 func (m Model) View() string {
