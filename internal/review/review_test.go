@@ -27,11 +27,12 @@ type fakeReviewer struct {
 	gotDiff   string
 	gotPrompt string
 	gotDir    string
+	gotSkill  string
 	result    Result
 }
 
-func (f *fakeReviewer) Review(_ core.MR, diff, prompt, dir string) Result {
-	f.gotDiff, f.gotPrompt, f.gotDir = diff, prompt, dir
+func (f *fakeReviewer) Review(req ReviewReq) Result {
+	f.gotDiff, f.gotPrompt, f.gotDir, f.gotSkill = req.Diff, req.Prompt, req.Dir, req.Skill
 	return f.result
 }
 
@@ -106,7 +107,7 @@ func (f *fakeCmd) Run(stdin, dir string, args ...string) ([]byte, error) {
 func TestClaudeReviewerReadOnlyFlags(t *testing.T) {
 	f := &fakeCmd{out: []byte(`{"result":"a review"}`)}
 	cr := ClaudeReviewer{R: f}
-	res := cr.Review(mr(), "diff here", "be concise", "")
+	res := cr.Review(ReviewReq{MR: mr(), Diff: "diff here", Prompt: "be concise"})
 	if res.Err != nil {
 		t.Fatalf("err: %v", res.Err)
 	}
@@ -133,7 +134,7 @@ func TestClaudeReviewerReadOnlyFlags(t *testing.T) {
 
 func TestClaudeReviewerSubprocessError(t *testing.T) {
 	f := &fakeCmd{err: errors.New("claude died")}
-	if res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", ""); res.Err == nil {
+	if res := (ClaudeReviewer{R: f}).Review(ReviewReq{MR: mr(), Diff: "d", Prompt: "p"}); res.Err == nil {
 		t.Error("subprocess error should surface")
 	}
 }
@@ -145,7 +146,7 @@ func TestClaudeReviewerStdoutWinsOverExitCode(t *testing.T) {
 		out: []byte(`{"is_error":true,"result":"Not logged in · Please run /login"}`),
 		err: errors.New("exit status 1"),
 	}
-	res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", "")
+	res := (ClaudeReviewer{R: f}).Review(ReviewReq{MR: mr(), Diff: "d", Prompt: "p"})
 	if res.Err == nil {
 		t.Fatal("want error")
 	}
@@ -157,9 +158,60 @@ func TestClaudeReviewerStdoutWinsOverExitCode(t *testing.T) {
 func TestClaudeReviewerExitErrorWhenNoStdout(t *testing.T) {
 	// Non-zero exit with no parseable stdout -> the process error surfaces.
 	f := &fakeCmd{out: []byte(""), err: errors.New("exit status 1: some stderr")}
-	res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", "")
+	res := (ClaudeReviewer{R: f}).Review(ReviewReq{MR: mr(), Diff: "d", Prompt: "p"})
 	if res.Err == nil || !strings.Contains(res.Err.Error(), "stderr") {
 		t.Errorf("process error (with stderr) should surface, got: %v", res.Err)
+	}
+}
+
+func TestClaudeReviewerWithSkillUsesStreamAndReports(t *testing.T) {
+	stream := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"superpowers:requesting-code-review"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"description":"x"}}]}}
+{"type":"result","is_error":false,"result":"## Review\nok"}`
+	f := &fakeCmd{out: []byte(stream)}
+	res := (ClaudeReviewer{R: f}).Review(ReviewReq{
+		MR: mr(), Diff: "d", Prompt: "p", Skill: "superpowers:requesting-code-review",
+	})
+	if res.Err != nil {
+		t.Fatalf("err: %v", res.Err)
+	}
+	if res.Text != "## Review\nok" {
+		t.Errorf("text = %q", res.Text)
+	}
+	if len(res.SkillsUsed) != 1 || res.SkillsUsed[0] != "superpowers:requesting-code-review" {
+		t.Errorf("SkillsUsed = %v (should report the invoked skill)", res.SkillsUsed)
+	}
+	if res.Subagents != 1 {
+		t.Errorf("Subagents = %d, want 1", res.Subagents)
+	}
+	// must use stream-json and grant the skill/subagent tools, but NO writes
+	joined := strings.Join(f.args, " ")
+	for _, want := range []string{"stream-json", "--verbose", "Skill", "Task"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("skill review args missing %q: %s", want, joined)
+		}
+	}
+	// the prompt instructs claude to invoke the skill
+	if !strings.Contains(f.in, "Skill tool") || !strings.Contains(f.in, "superpowers:requesting-code-review") {
+		t.Errorf("prompt should instruct invoking the skill: %q", f.in)
+	}
+}
+
+func TestClaudeReviewerSkillNotInvokedStillReturnsText(t *testing.T) {
+	// Configured a skill, but claude never called the Skill tool. We still get
+	// the review text; SkillsUsed is empty so the caller can warn.
+	stream := `{"type":"assistant","message":{"content":[{"type":"text","text":"thinking"}]}}
+{"type":"result","is_error":false,"result":"a review without the skill"}`
+	f := &fakeCmd{out: []byte(stream)}
+	res := (ClaudeReviewer{R: f}).Review(ReviewReq{MR: mr(), Diff: "d", Prompt: "p", Skill: "some:skill"})
+	if res.Err != nil {
+		t.Fatalf("err: %v", res.Err)
+	}
+	if len(res.SkillsUsed) != 0 {
+		t.Errorf("no skill should be reported, got %v", res.SkillsUsed)
+	}
+	if res.Text == "" {
+		t.Error("should still return the review text")
 	}
 }
 
@@ -167,7 +219,7 @@ func TestClaudeReviewerIsErrorNotTreatedAsReview(t *testing.T) {
 	// claude can exit 0 but report is_error:true (e.g. "Not logged in"). That
 	// message must NOT become a review (it would otherwise be posted to the MR).
 	f := &fakeCmd{out: []byte(`{"type":"result","is_error":true,"result":"Not logged in · Please run /login"}`)}
-	res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", "")
+	res := (ClaudeReviewer{R: f}).Review(ReviewReq{MR: mr(), Diff: "d", Prompt: "p"})
 	if res.Err == nil {
 		t.Fatal("is_error result must surface as an error, not a review")
 	}

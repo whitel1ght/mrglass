@@ -33,22 +33,34 @@ type Result struct {
 	// LocalContext is true when the review ran inside a checkout of the project
 	// (full repo context: CLAUDE.md, skills, all files); false for diff-only.
 	LocalContext bool
-	Text         string
-	Err          error
+	// SkillsUsed lists the Claude skills the review actually invoked (proof a
+	// configured review skill ran); Subagents counts dispatched Task subagents.
+	SkillsUsed []string
+	Subagents  int
+	Text       string
+	Err        error
 }
 
-// Reviewer turns an MR diff into review text via Claude. dir is the working
-// directory to run Claude in (the project worktree for full context, or "" for
-// a diff-only review with no project on disk).
+// ReviewReq bundles everything a reviewer needs for one review.
+type ReviewReq struct {
+	MR     core.MR
+	Diff   string
+	Prompt string
+	Dir    string // working dir (project worktree) or "" for diff-only
+	Skill  string // skill to invoke (e.g. "superpowers:requesting-code-review") or ""
+}
+
+// Reviewer turns an MR into review text via Claude.
 type Reviewer interface {
-	Review(mr core.MR, diff, prompt, dir string) Result
+	Review(req ReviewReq) Result
 }
 
-// Options configures Generate's local-context behavior.
+// Options configures Generate's local-context and skill behavior.
 type Options struct {
 	ProjectsDir  string
 	ProjectPaths map[string]string
 	Worktree     Worktree // how to make an isolated checkout; nil -> diff-only
+	Skill        string   // review skill to invoke, or "" for a plain review
 }
 
 // Generate fetches the MR diff and asks the reviewer to produce review text. If
@@ -83,7 +95,7 @@ func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string, opts Options) R
 		}
 	}
 
-	res := rv.Review(mr, diff, prompt, dir)
+	res := rv.Review(ReviewReq{MR: mr, Diff: diff, Prompt: prompt, Dir: dir, Skill: opts.Skill})
 	res.LocalContext = local && res.Err == nil
 	if res.Err != nil {
 		// The status bar truncates; record the full error + mode for diagnosis.
@@ -146,32 +158,70 @@ func Available() bool {
 	return err == nil
 }
 
-func (cr ClaudeReviewer) Review(mr core.MR, diff, prompt, dir string) Result {
-	full := fmt.Sprintf("%s\n\nMerge request: %s — %q\n\nDIFF:\n%s",
-		prompt, mr.Ref, mr.Title, diff)
-	args := []string{
-		"-p", full,
-		"--output-format", "json",
-		"--allowedTools", "Read",
+func (cr ClaudeReviewer) Review(req ReviewReq) Result {
+	if req.Skill != "" {
+		return cr.reviewWithSkill(req)
 	}
-	out, runErr := cr.R.Run(full, dir, args...)
-	// Parse stdout FIRST even on a non-zero exit: claude commonly exits 1 while
-	// still emitting a JSON result whose is_error message ("Not logged in", a
-	// quota error, …) is far more useful than the bare exit code.
+	return cr.reviewPlain(req)
+}
+
+// reviewPlain runs a single-shot prompt review (no skill), parsing the json
+// envelope.
+func (cr ClaudeReviewer) reviewPlain(req ReviewReq) Result {
+	full := reviewPrompt(req.Prompt, req.MR, req.Diff)
+	out, runErr := cr.R.Run(full, req.Dir,
+		"-p", full, "--output-format", "json", "--allowedTools", "Read")
 	text, validJSON, perr := parseResult(out)
 	if perr == nil {
-		return Result{Ref: mr.Ref, Text: text}
+		return Result{Ref: req.MR.Ref, Text: text}
 	}
-	// If stdout was valid JSON, its message (is_error / no-result) is the real
-	// reason — prefer it over the opaque process exit code. Only when stdout is
-	// unusable do we fall back to the process error (which carries stderr).
 	if validJSON {
-		return Result{Ref: mr.Ref, Err: perr}
+		return Result{Ref: req.MR.Ref, Err: perr}
 	}
 	if runErr != nil {
-		return Result{Ref: mr.Ref, Err: runErr}
+		return Result{Ref: req.MR.Ref, Err: runErr}
 	}
-	return Result{Ref: mr.Ref, Err: perr}
+	return Result{Ref: req.MR.Ref, Err: perr}
+}
+
+// reviewWithSkill invokes a Claude skill for the review and verifies (via
+// stream-json) that the skill actually ran, reporting it on the Result. Skills
+// may dispatch subagents, so the tool allowlist is wider — but still has no
+// write/GitLab capability; posting stays gated on user confirmation.
+func (cr ClaudeReviewer) reviewWithSkill(req ReviewReq) Result {
+	instr := fmt.Sprintf(
+		"Use the Skill tool to invoke the %q skill, then apply it to review this "+
+			"merge request. %s", req.Skill, reviewPrompt(req.Prompt, req.MR, req.Diff))
+	out, runErr := cr.R.Run(instr, req.Dir,
+		"-p", instr,
+		"--output-format", "stream-json", "--verbose",
+		"--allowedTools", "Read,Skill,Task,Grep,Glob,Bash",
+	)
+	outcome, perr := parseStream(out)
+	if perr != nil {
+		if runErr != nil {
+			return Result{Ref: req.MR.Ref, Err: runErr}
+		}
+		return Result{Ref: req.MR.Ref, Err: perr}
+	}
+	if outcome.IsError {
+		msg := outcome.ErrMsg
+		if msg == "" {
+			msg = "claude reported an error"
+		}
+		return Result{Ref: req.MR.Ref, Err: fmt.Errorf("claude: %s", msg)}
+	}
+	return Result{
+		Ref:        req.MR.Ref,
+		Text:       outcome.Text,
+		SkillsUsed: outcome.SkillsUsed,
+		Subagents:  outcome.Subagents,
+	}
+}
+
+func reviewPrompt(prompt string, mr core.MR, diff string) string {
+	return fmt.Sprintf("%s\n\nMerge request: %s — %q\n\nDIFF:\n%s",
+		prompt, mr.Ref, mr.Title, diff)
 }
 
 // parseResult parses claude's --output-format json envelope. The bool reports

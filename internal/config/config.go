@@ -50,6 +50,10 @@ type Config struct {
 	// ReviewPrompt is the instruction given to Claude for the on-demand MR
 	// review (the 'c' hotkey). The MR diff is appended to it.
 	ReviewPrompt string `yaml:"reviewPrompt"`
+	// ReviewSkill, when set, makes the review invoke a Claude skill (e.g.
+	// "superpowers:requesting-code-review") via the Skill tool. mrglass verifies
+	// the skill actually ran and reports it. Empty -> plain prompt review.
+	ReviewSkill string `yaml:"reviewSkill"`
 	// ProjectsDir is the base directory holding your local clones. When set, the
 	// review runs with full project context: mrglass finds the matching clone,
 	// checks out the MR branch in a throwaway git worktree (your working copy is

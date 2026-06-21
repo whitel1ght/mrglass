@@ -137,6 +137,7 @@ func (m Model) reviewCmd(mr core.MR) tea.Cmd {
 		ProjectsDir:  m.cfg.ProjectsDir,
 		ProjectPaths: m.cfg.ProjectPaths,
 		Worktree:     review.GitWorktree{},
+		Skill:        m.cfg.ReviewSkill,
 	}
 	return func() tea.Msg { return reviewMsg(review.Generate(gl, rv, mr, prompt, opts)) }
 }
@@ -185,6 +186,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ctxNote := "diff-only"
 		if res.LocalContext {
 			ctxNote = "full project context"
+		}
+		if len(res.SkillsUsed) > 0 {
+			ctxNote += fmt.Sprintf(", skill: %s ✓", strings.Join(res.SkillsUsed, ", "))
+			if res.Subagents > 0 {
+				ctxNote += fmt.Sprintf(", %d subagents", res.Subagents)
+			}
+		} else if m.cfg.ReviewSkill != "" {
+			ctxNote += ", ⚠ skill not invoked"
 		}
 		m.status = "review ready (" + ctxNote + ") — post to MR? [y]es / [n]o"
 		return m, nil

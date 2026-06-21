@@ -13,6 +13,12 @@ reviewPrompt: >
   actionable review feedback as a Markdown comment. Group findings by severity
   (Critical / Important / Minor). If it looks good, say so briefly. No preamble.
 
+# Optionally drive the review with a Claude skill (invoked via the Skill tool).
+# mrglass verifies the skill actually ran and shows "skill: <name> ✓" in the
+# confirm prompt (or "⚠ skill not invoked" if it didn't). Skills may dispatch
+# subagents, so this is slower/heavier than a plain prompt review. Empty = no skill.
+# reviewSkill: superpowers:requesting-code-review
+
 # Local project context for reviews (optional but recommended). When projectsDir
 # is set, the `c` review finds your local clone of the MR's repo, checks out the
 # MR branch in a THROWAWAY git worktree (your working copy is never touched — no

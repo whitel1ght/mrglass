@@ -33,8 +33,8 @@ func (mockAnalyzer) Triage(c core.Change) analyze.Advice {
 // fake review reviewer + gitlab for the review-flow tests.
 type fakeReviewer struct{ text string }
 
-func (f fakeReviewer) Review(mr core.MR, diff, prompt, dir string) review.Result {
-	return review.Result{Ref: mr.Ref, Text: f.text}
+func (f fakeReviewer) Review(req review.ReviewReq) review.Result {
+	return review.Result{Ref: req.MR.Ref, Text: f.text}
 }
 
 type fakeReviewGL struct {
