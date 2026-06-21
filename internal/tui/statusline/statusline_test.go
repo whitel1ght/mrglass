@@ -69,6 +69,25 @@ func TestRenderIncludesTitleAndCISymbol(t *testing.T) {
 	}
 }
 
+func TestRenderApprovalMark(t *testing.T) {
+	st := theme.BuildStyles(theme.Get("default"))
+
+	// Not approved: 0 of 2 required -> dim ○, no ✓.
+	notApproved := baseRow() // baseRow has ApprovalsRequired:2, no approvers
+	out := Render(cfg(), st, notApproved, 80, false)
+	if !strings.Contains(out, "○") {
+		t.Errorf("unapproved MR should show ○: %q", out)
+	}
+
+	// Approved: 2 of 2 required -> green ✓.
+	approved := baseRow()
+	approved.MR.ApprovedBy = []string{"alice", "bob"}
+	out = Render(cfg(), st, approved, 80, false)
+	if !strings.Contains(out, "✓") {
+		t.Errorf("approved MR should show ✓: %q", out)
+	}
+}
+
 func TestRenderHidesCommentsWhenZero(t *testing.T) {
 	rv := baseRow()
 	rv.MR.Comments = 0

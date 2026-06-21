@@ -86,14 +86,18 @@ func renderSegment(s config.Segment, st theme.Styles, rv RowView) string {
 		}
 		style = ciStyle(st, mr.CI)
 	case "approvals":
-		text = s.Format
-		text = strings.ReplaceAll(text, "{approved}", fmt.Sprint(len(mr.ApprovedBy)))
-		text = strings.ReplaceAll(text, "{required}", fmt.Sprint(rv.ApprovalsRequired))
-		// green once the required approvals are met, otherwise neutral
-		if rv.ApprovalsRequired > 0 && len(mr.ApprovedBy) >= rv.ApprovalsRequired {
-			style = st.Success
+		// Glanceable yes/no: green ✓ when approved, dim ○ otherwise — always in
+		// the same column so it scans down the list. (The approver count and
+		// names live in the expanded detail.) A custom Format still wins.
+		if core.Approved(mr.ApprovedBy, rv.ApprovalsRequired) {
+			text, style = "✓", st.Success
 		} else {
-			style = st.Subtle
+			text, style = "○", st.Subtle
+		}
+		if s.Format != "" {
+			text = s.Format
+			text = strings.ReplaceAll(text, "{approved}", fmt.Sprint(len(mr.ApprovedBy)))
+			text = strings.ReplaceAll(text, "{required}", fmt.Sprint(rv.ApprovalsRequired))
 		}
 	case "comments":
 		text = strings.ReplaceAll(s.Format, "{comments}", fmt.Sprint(mr.Comments))

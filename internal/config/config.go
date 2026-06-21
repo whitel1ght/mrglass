@@ -73,7 +73,7 @@ func Default() Config {
 			Right: []Segment{
 				{Type: "ci", When: `ci != ""`,
 					Symbols: map[string]string{"success": "✓", "failed": "✗", "running": "🔄"}},
-				{Type: "approvals", When: "required > 0", Format: "{approved}/{required}✓"},
+				{Type: "approvals"},
 				{Type: "comments", When: "comments > 0", Format: "💬{comments}"},
 				{Type: "advice", When: "hasAdvice", Text: "💡"},
 				{Type: "age", Source: "updatedAt", Align: "right", Style: "faint"},

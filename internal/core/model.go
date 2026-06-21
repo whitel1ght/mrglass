@@ -63,6 +63,18 @@ func (m *MR) SetApprovalsOK(ok bool) { m.approvalsOK = ok }
 // ApprovalsOK reports whether the approvals fetch succeeded this run.
 func (m *MR) ApprovalsOK() bool { return m.approvalsOK }
 
+// Approved reports whether the MR is approved. When a non-zero approval
+// requirement is known, that many genuine approvals must be present; when no
+// requirement is set (required==0, e.g. a project with no approval rule or the
+// value unavailable), any genuine approval counts. GitLab's misleading
+// approved=true flag is never consulted — only the real approver list.
+func Approved(approvedBy []string, required int) bool {
+	if required > 0 {
+		return len(approvedBy) >= required
+	}
+	return len(approvedBy) > 0
+}
+
 // ParseTicket extracts a ticket key from the title, then the branch, upper-cased.
 // Returns "Other" when neither matches.
 func ParseTicket(title, branch, pattern string) string {

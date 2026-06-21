@@ -23,7 +23,9 @@ statusline:
   right:
     - { type: ci, when: 'ci != ""',
         symbols: { success: "✓", failed: "✗", running: "🔄" } }
-    - { type: approvals, when: 'required > 0', format: "{approved}/{required}✓" }
+    # Glanceable approval mark: green ✓ when approved, dim ○ otherwise.
+    # (Give it a format like "{approved}/{required}✓" to show the count instead.)
+    - { type: approvals }
     - { type: comments, when: 'comments > 0', format: "💬{comments}" }
     - { type: advice, when: 'hasAdvice', text: "💡" }
     - { type: age, source: updatedAt, align: right, style: faint }
