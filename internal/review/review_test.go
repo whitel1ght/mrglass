@@ -197,6 +197,39 @@ func TestClaudeReviewerWithSkillUsesStreamAndReports(t *testing.T) {
 	}
 }
 
+func TestClaudeReviewerSkillPassesPluginDirs(t *testing.T) {
+	stream := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-components:mr-review"}}]}}
+{"type":"result","is_error":false,"result":"ok"}`
+	f := &fakeCmd{out: []byte(stream)}
+	(ClaudeReviewer{R: f}).Review(ReviewReq{
+		MR: mr(), Diff: "d", Prompt: "p",
+		Skill:      "claude-components:mr-review",
+		PluginDirs: []string{"/abs/claude-components", "~/projects/claude-components"},
+	})
+	joined := strings.Join(f.args, " ")
+	if !strings.Contains(joined, "--plugin-dir /abs/claude-components") {
+		t.Errorf("absolute plugin dir not passed: %s", joined)
+	}
+	// the ~ form must be expanded (no literal "~/" in the passed arg)
+	if strings.Contains(joined, "--plugin-dir ~/") {
+		t.Errorf("plugin dir ~ should be expanded: %s", joined)
+	}
+	if !strings.Contains(joined, "projects/claude-components") {
+		t.Errorf("expanded plugin dir missing: %s", joined)
+	}
+}
+
+func TestClaudeReviewerPlainReviewIgnoresPluginDirs(t *testing.T) {
+	// No skill -> plain json path -> no --plugin-dir (they're skill-only).
+	f := &fakeCmd{out: []byte(`{"result":"ok"}`)}
+	(ClaudeReviewer{R: f}).Review(ReviewReq{
+		MR: mr(), Diff: "d", Prompt: "p", PluginDirs: []string{"/x"},
+	})
+	if strings.Contains(strings.Join(f.args, " "), "--plugin-dir") {
+		t.Error("plain review must not pass --plugin-dir")
+	}
+}
+
 func TestClaudeReviewerSkillNotInvokedStillReturnsText(t *testing.T) {
 	// Configured a skill, but claude never called the Skill tool. We still get
 	// the review text; SkillsUsed is empty so the caller can warn.

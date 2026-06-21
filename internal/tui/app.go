@@ -138,6 +138,7 @@ func (m Model) reviewCmd(mr core.MR) tea.Cmd {
 		ProjectPaths: m.cfg.ProjectPaths,
 		Worktree:     review.GitWorktree{},
 		Skill:        m.cfg.ReviewSkill,
+		PluginDirs:   m.cfg.PluginDirs,
 	}
 	return func() tea.Msg { return reviewMsg(review.Generate(gl, rv, mr, prompt, opts)) }
 }

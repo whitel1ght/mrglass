@@ -43,11 +43,12 @@ type Result struct {
 
 // ReviewReq bundles everything a reviewer needs for one review.
 type ReviewReq struct {
-	MR     core.MR
-	Diff   string
-	Prompt string
-	Dir    string // working dir (project worktree) or "" for diff-only
-	Skill  string // skill to invoke (e.g. "superpowers:requesting-code-review") or ""
+	MR         core.MR
+	Diff       string
+	Prompt     string
+	Dir        string   // working dir (project worktree) or "" for diff-only
+	Skill      string   // skill to invoke (e.g. "superpowers:requesting-code-review") or ""
+	PluginDirs []string // extra --plugin-dir paths to make non-global skills available
 }
 
 // Reviewer turns an MR into review text via Claude.
@@ -61,6 +62,7 @@ type Options struct {
 	ProjectPaths map[string]string
 	Worktree     Worktree // how to make an isolated checkout; nil -> diff-only
 	Skill        string   // review skill to invoke, or "" for a plain review
+	PluginDirs   []string // extra --plugin-dir paths for non-global skills
 }
 
 // Generate fetches the MR diff and asks the reviewer to produce review text. If
@@ -95,7 +97,10 @@ func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string, opts Options) R
 		}
 	}
 
-	res := rv.Review(ReviewReq{MR: mr, Diff: diff, Prompt: prompt, Dir: dir, Skill: opts.Skill})
+	res := rv.Review(ReviewReq{
+		MR: mr, Diff: diff, Prompt: prompt, Dir: dir,
+		Skill: opts.Skill, PluginDirs: opts.PluginDirs,
+	})
 	res.LocalContext = local && res.Err == nil
 	if res.Err != nil {
 		// The status bar truncates; record the full error + mode for diagnosis.
@@ -192,11 +197,18 @@ func (cr ClaudeReviewer) reviewWithSkill(req ReviewReq) Result {
 	instr := fmt.Sprintf(
 		"Use the Skill tool to invoke the %q skill, then apply it to review this "+
 			"merge request. %s", req.Skill, reviewPrompt(req.Prompt, req.MR, req.Diff))
-	out, runErr := cr.R.Run(instr, req.Dir,
+	args := []string{
 		"-p", instr,
 		"--output-format", "stream-json", "--verbose",
 		"--allowedTools", "Read,Skill,Task,Grep,Glob,Bash",
-	)
+	}
+	// Make non-global skills available for this run only (no ~/.claude change).
+	for _, d := range req.PluginDirs {
+		if d != "" {
+			args = append(args, "--plugin-dir", expandHome(d))
+		}
+	}
+	out, runErr := cr.R.Run(instr, req.Dir, args...)
 	outcome, perr := parseStream(out)
 	if perr != nil {
 		if runErr != nil {

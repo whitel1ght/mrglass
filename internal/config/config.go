@@ -51,9 +51,15 @@ type Config struct {
 	// review (the 'c' hotkey). The MR diff is appended to it.
 	ReviewPrompt string `yaml:"reviewPrompt"`
 	// ReviewSkill, when set, makes the review invoke a Claude skill (e.g.
-	// "superpowers:requesting-code-review") via the Skill tool. mrglass verifies
-	// the skill actually ran and reports it. Empty -> plain prompt review.
+	// "superpowers:requesting-code-review" or "claude-components:mr-review") via
+	// the Skill tool. mrglass verifies the skill actually ran and reports it.
+	// Empty -> plain prompt review.
 	ReviewSkill string `yaml:"reviewSkill"`
+	// PluginDirs are extra directories loaded into the review's claude run via
+	// --plugin-dir (session-scoped; does NOT touch your global ~/.claude). Point
+	// at a checkout like ~/projects/claude-components to use its skills; the
+	// skill is then namespaced by the dir name, e.g. "claude-components:mr-review".
+	PluginDirs []string `yaml:"pluginDirs"`
 	// ProjectsDir is the base directory holding your local clones. When set, the
 	// review runs with full project context: mrglass finds the matching clone,
 	// checks out the MR branch in a throwaway git worktree (your working copy is

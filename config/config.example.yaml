@@ -17,7 +17,15 @@ reviewPrompt: >
 # mrglass verifies the skill actually ran and shows "skill: <name> ✓" in the
 # confirm prompt (or "⚠ skill not invoked" if it didn't). Skills may dispatch
 # subagents, so this is slower/heavier than a plain prompt review. Empty = no skill.
+#
+# An installed plugin skill (e.g. superpowers):
 # reviewSkill: superpowers:requesting-code-review
+#
+# OR a skill from a local checkout loaded just for this run via pluginDirs (no
+# change to your global ~/.claude). The skill is namespaced by the dir name:
+# reviewSkill: claude-components:mr-review
+# pluginDirs:
+#   - ~/projects/claude-components
 
 # Local project context for reviews (optional but recommended). When projectsDir
 # is set, the `c` review finds your local clone of the MR's repo, checks out the
