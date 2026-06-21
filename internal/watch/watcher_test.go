@@ -1,6 +1,8 @@
 package watch
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -13,6 +15,13 @@ type fakeProvider struct{ mrs []core.MR }
 func (f fakeProvider) Whoami() (string, error) { return "you", nil }
 func (f fakeProvider) List(string, int, string) ([]core.MR, error) {
 	return f.mrs, nil
+}
+
+type errProvider struct{}
+
+func (errProvider) Whoami() (string, error) { return "you", nil }
+func (errProvider) List(string, int, string) ([]core.MR, error) {
+	return nil, errors.New("glab boom")
 }
 
 func mineMR(ref, ci string) core.MR {
@@ -62,5 +71,34 @@ func TestTriageWorthyFilters(t *testing.T) {
 	got := TriageWorthy(changes)
 	if len(got) != 1 {
 		t.Errorf("only the CI-failed change is worthy, got %d", len(got))
+	}
+}
+
+func TestFetchProviderErrorReturnsErrAndDoesNotWriteState(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	d := Deps{
+		Provider:  errProvider{},
+		Me:        "you",
+		StatePath: statePath,
+		Cfg:       config.Default(),
+	}
+	res := Fetch(d)
+
+	// Assert error is returned
+	if res.Err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Assert MRs and Changes are nil/empty
+	if res.MRs != nil && len(res.MRs) > 0 {
+		t.Errorf("expected no MRs, got %d", len(res.MRs))
+	}
+	if res.Changes != nil && len(res.Changes) > 0 {
+		t.Errorf("expected no changes, got %d", len(res.Changes))
+	}
+
+	// Assert state file was NOT created
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Error("state file should not be written on provider error")
 	}
 }
