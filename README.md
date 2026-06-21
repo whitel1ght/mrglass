@@ -8,8 +8,16 @@ reasoning about.
 
 Successor to the [`gitlab-mr-status`](../gitlab-mr-status) prototype, reimplemented in Go.
 
-> **Status: design phase.** No code yet. See the design spec:
-> [`docs/superpowers/specs/2026-06-21-mrglass-design.md`](docs/superpowers/specs/2026-06-21-mrglass-design.md).
+## Build & run
+
+```bash
+go build -o mrglass ./cmd/mrglass
+./mrglass            # requires an authenticated `glab`
+./mrglass -version
+```
+
+Config lives at `~/.config/mrglass/config.yaml` (see `config/config.example.yaml`);
+it runs with no config file present.
 
 ## At a glance (planned v1)
 

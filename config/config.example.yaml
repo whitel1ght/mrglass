@@ -1,0 +1,29 @@
+# mrglass configuration. All fields optional; shown values are the defaults.
+days: 30
+ticketRegex: '([A-Z][A-Z0-9]+-\d+)'
+refreshMinutes: 5          # 0 disables auto-refresh
+autoTriage: true
+theme: default
+
+sections:
+  - title: "Needs My Review"
+    filter: 'role == "review_requested" && !draft'
+  - title: "Mine"
+    filter: 'role == "mine"'
+  - title: "Approved & Green"
+    filter: 'len(approvedBy) > 0 && ci == "success"'
+
+statusline:
+  states:
+    selected:  { bg: "#2a2a40", bold: true }
+    ci_failed: { fg: "#e06c75" }
+  left:
+    - { type: marker, source: role }
+    - { type: text, source: title, grow: true, maxWidth: 60 }
+  right:
+    - { type: ci, when: 'ci != ""',
+        symbols: { success: "✓", failed: "✗", running: "🔄" } }
+    - { type: approvals, when: 'required > 0', format: "{approved}/{required}✓" }
+    - { type: comments, when: 'comments > 0', format: "💬{comments}" }
+    - { type: advice, when: 'hasAdvice', text: "💡" }
+    - { type: age, source: updatedAt, align: right, style: faint }

@@ -1,0 +1,21 @@
+[
+  {
+    "iid": 177,
+    "project_id": 42,
+    "title": "feat(ABC-1234): new thing",
+    "web_url": "https://gitlab.com/group/project/-/merge_requests/177",
+    "source_branch": "you/abc-1234",
+    "target_branch": "master",
+    "draft": false,
+    "work_in_progress": false,
+    "has_conflicts": false,
+    "blocking_discussions_resolved": true,
+    "user_notes_count": 2,
+    "detailed_merge_status": "mergeable",
+    "updated_at": "2026-06-18T12:00:00Z",
+    "author": { "username": "you" },
+    "reviewers": [ { "username": "alice" } ],
+    "references": { "full": "group/project!177" },
+    "head_pipeline": { "status": "failed", "web_url": "https://gitlab.com/group/project/-/pipelines/9" }
+  }
+]
