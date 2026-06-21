@@ -50,12 +50,13 @@ func TestTabSwitchRefiltersInstantlyWithoutFetch(t *testing.T) {
 	m.width, m.height = 100, 30
 
 	// One MR matching section 0 ("Needs My Review": review_requested) and one
-	// matching section 1 ("Mine": mine).
+	// matching section 1 ("Mine · Approved": role==mine && approved).
 	review := mr("g/p!1", "success")
 	review.Role = core.RoleReviewRequested
 	review.Title = "review me"
 	mine := mr("g/p!2", "success")
 	mine.Role = core.RoleMine
+	mine.ApprovedBy = []string{"alice"} // approved -> matches "Mine · Approved"
 	mine.Title = "mine to ship"
 
 	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{review, mine}}))

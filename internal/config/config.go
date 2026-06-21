@@ -58,8 +58,8 @@ func Default() Config {
 		Theme:          "tokyonight",
 		Sections: []SectionConfig{
 			{Title: "Needs My Review", Filter: `role == "review_requested" && !draft`},
-			{Title: "Mine", Filter: `role == "mine"`},
-			{Title: "Approved", Filter: `len(approvedBy) > 0`},
+			{Title: "Mine · Approved", Filter: `role == "mine" && len(approvedBy) > 0`},
+			{Title: "Mine · Needs approval", Filter: `role == "mine" && len(approvedBy) == 0`},
 		},
 		Statusline: StatuslineConfig{
 			States: map[string]StyleConfig{

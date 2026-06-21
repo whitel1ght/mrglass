@@ -8,10 +8,10 @@ theme: tokyonight        # tokyonight | default | dracula
 sections:
   - title: "Needs My Review"
     filter: 'role == "review_requested" && !draft'
-  - title: "Mine"
-    filter: 'role == "mine"'
-  - title: "Approved"
-    filter: 'len(approvedBy) > 0'
+  - title: "Mine · Approved"
+    filter: 'role == "mine" && len(approvedBy) > 0'
+  - title: "Mine · Needs approval"
+    filter: 'role == "mine" && len(approvedBy) == 0'
 
 statusline:
   states:
