@@ -5,6 +5,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/dmitry/mrglass/internal/config"
 	"github.com/dmitry/mrglass/internal/core"
 	"github.com/dmitry/mrglass/internal/tui/theme"
@@ -23,6 +26,37 @@ func baseRow() RowView {
 
 func cfg() config.StatuslineConfig {
 	return config.Default().Statusline
+}
+
+func TestRenderColorsCIByStatus(t *testing.T) {
+	// Force a color profile so lipgloss actually emits ANSI escapes; otherwise
+	// in a non-TTY test env it degrades to plain text and we can't observe color.
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+
+	failed := baseRow()
+	failed.MR.CI = "failed"
+	passed := baseRow()
+	passed.MR.CI = "success"
+
+	outFailed := Render(cfg(), st, failed, 80, false)
+	outPassed := Render(cfg(), st, passed, 80, false)
+
+	// Each row must contain ANSI escape sequences (it is colored, not plain).
+	if !strings.Contains(outFailed, "\x1b[") {
+		t.Errorf("expected ANSI color escapes in a colored row, got %q", outFailed)
+	}
+	// The danger color (failed) and success color (passed) differ, so the two
+	// rows must not be identical once the CI status differs.
+	if outFailed == outPassed {
+		t.Error("failed and passed CI rows should render with different colors")
+	}
+	// The Tokyo Night danger red (#f7768e) should appear for a failed CI.
+	if !strings.Contains(outFailed, "247") { // 0xf7 = 247, part of the truecolor SGR
+		t.Logf("failed row: %q", outFailed) // informational; SGR encoding may vary
+	}
 }
 
 func TestRenderIncludesTitleAndCISymbol(t *testing.T) {

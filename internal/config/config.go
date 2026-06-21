@@ -55,7 +55,7 @@ func Default() Config {
 		TicketRegex:    `([A-Z][A-Z0-9]+-\d+)`,
 		RefreshMinutes: 5,
 		AutoTriage:     true,
-		Theme:          "default",
+		Theme:          "tokyonight",
 		Sections: []SectionConfig{
 			{Title: "Needs My Review", Filter: `role == "review_requested" && !draft`},
 			{Title: "Mine", Filter: `role == "mine"`},

@@ -3,7 +3,7 @@ days: 30
 ticketRegex: '([A-Z][A-Z0-9]+-\d+)'
 refreshMinutes: 5          # 0 disables auto-refresh
 autoTriage: true
-theme: default
+theme: tokyonight        # tokyonight | default | dracula
 
 sections:
   - title: "Needs My Review"

@@ -6,20 +6,27 @@ import (
 	"github.com/dmitry/mrglass/internal/config"
 )
 
-func TestGetUnknownFallsBackToDefault(t *testing.T) {
+func TestGetUnknownFallsBackToTokyonight(t *testing.T) {
 	got := Get("does-not-exist")
-	if got.Name != "default" {
-		t.Errorf("unknown theme should fall back to default, got %q", got.Name)
+	if got.Name != "tokyonight" {
+		t.Errorf("unknown theme should fall back to tokyonight, got %q", got.Name)
 	}
 }
 
-func TestRegistryHasDefaultAndDracula(t *testing.T) {
+func TestRegistryHasThemes(t *testing.T) {
 	r := Registry()
-	if _, ok := r["default"]; !ok {
-		t.Error("registry missing default")
+	for _, name := range []string{"tokyonight", "default", "dracula"} {
+		if _, ok := r[name]; !ok {
+			t.Errorf("registry missing %q", name)
+		}
 	}
-	if _, ok := r["dracula"]; !ok {
-		t.Error("registry missing dracula")
+}
+
+func TestThemesHaveAccentColor(t *testing.T) {
+	for name, th := range Registry() {
+		if th.Accent == "" {
+			t.Errorf("theme %q missing Accent color", name)
+		}
 	}
 }
 
