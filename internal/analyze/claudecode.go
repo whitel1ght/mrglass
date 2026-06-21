@@ -70,10 +70,20 @@ func buildPrompt(c core.Change) string {
 
 func parseResult(raw []byte) (string, error) {
 	var env struct {
-		Result string `json:"result"`
+		Result  string `json:"result"`
+		IsError bool   `json:"is_error"`
 	}
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return "", err
+	}
+	// Claude reports failures (e.g. "Not logged in", rate limits) via is_error
+	// with the message in result — don't mistake those for real advice.
+	if env.IsError {
+		msg := env.Result
+		if msg == "" {
+			msg = "claude reported an error"
+		}
+		return "", fmt.Errorf("claude: %s", msg)
 	}
 	if env.Result == "" {
 		return "", fmt.Errorf("claude returned no result")

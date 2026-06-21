@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/dmitry/mrglass/internal/core"
@@ -115,6 +116,43 @@ func (p *GitLabProvider) enrich(mr core.MR) core.MR {
 	mr.ApprovalsRequired = required
 	mr.SetApprovalsOK(true)
 	return mr
+}
+
+// MRDiff returns a compact unified diff for an MR (path + per-file diff hunk),
+// fetched via the changes endpoint. Used by the review feature.
+func (p *GitLabProvider) MRDiff(projectID, iid int) (string, error) {
+	path := fmt.Sprintf("projects/%d/merge_requests/%d/changes", projectID, iid)
+	out, err := APIGet(p.R, path, 2)
+	if err != nil {
+		return "", err
+	}
+	var resp struct {
+		Changes []struct {
+			OldPath string `json:"old_path"`
+			NewPath string `json:"new_path"`
+			Diff    string `json:"diff"`
+		} `json:"changes"`
+	}
+	if err := json.Unmarshal(out, &resp); err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	for _, c := range resp.Changes {
+		path := c.NewPath
+		if path == "" {
+			path = c.OldPath
+		}
+		fmt.Fprintf(&b, "--- %s\n%s\n", path, c.Diff)
+	}
+	return b.String(), nil
+}
+
+// PostNote posts a comment on an MR. This is a write; it is performed only after
+// the user confirms (the caller gates it).
+func (p *GitLabProvider) PostNote(projectID, iid int, body string) error {
+	path := fmt.Sprintf("projects/%d/merge_requests/%d/notes", projectID, iid)
+	_, err := APIPost(p.R, path, map[string]string{"body": body})
+	return err
 }
 
 func parseMRList(raw []byte) ([]rawMR, error) {

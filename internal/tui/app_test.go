@@ -8,6 +8,7 @@ import (
 	"github.com/dmitry/mrglass/internal/analyze"
 	"github.com/dmitry/mrglass/internal/config"
 	"github.com/dmitry/mrglass/internal/core"
+	"github.com/dmitry/mrglass/internal/review"
 	"github.com/dmitry/mrglass/internal/watch"
 )
 
@@ -27,6 +28,111 @@ type mockAnalyzer struct{}
 
 func (mockAnalyzer) Triage(c core.Change) analyze.Advice {
 	return analyze.Advice{Ref: c.Ref, Text: "x"}
+}
+
+// fake review reviewer + gitlab for the review-flow tests.
+type fakeReviewer struct{ text string }
+
+func (f fakeReviewer) Review(mr core.MR, diff, prompt string) review.Result {
+	return review.Result{Ref: mr.Ref, Text: f.text}
+}
+
+type fakeReviewGL struct {
+	posted     string
+	postCalled bool
+}
+
+func (f *fakeReviewGL) MRDiff(int, int) (string, error) { return "a diff", nil }
+func (f *fakeReviewGL) PostNote(_, _ int, body string) error {
+	f.postCalled, f.posted = true, body
+	return nil
+}
+
+// reviewModel builds a model with a selectable approved-mine MR (matches the
+// default first "Mine"-style section is index 1; use review_requested for index 0)
+// and the review feature wired.
+func reviewModel(t *testing.T) (Model, *fakeReviewGL) {
+	t.Helper()
+	gl := &fakeReviewGL{}
+	m := newTestModel().WithReview(fakeReviewer{text: "LGTM, ship it"}, gl)
+	m.width, m.height = 120, 30
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested // matches default section 0
+	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	return updated.(Model), gl
+}
+
+func TestReviewFlowConfirmAndPost(t *testing.T) {
+	m, gl := reviewModel(t)
+
+	// Press 'c' -> kicks off a review (reviewing flag set, command returned).
+	rmodel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = rmodel.(Model)
+	if cmd == nil || !m.reviewing {
+		t.Fatal("'c' should start a review")
+	}
+
+	// Simulate the review result arriving.
+	rmodel, _ = m.Update(reviewMsg(review.Result{Ref: "g/p!1", Text: "LGTM, ship it"}))
+	m = rmodel.(Model)
+	if m.pendingReview == nil {
+		t.Fatal("review result should enter confirm state")
+	}
+	if v := m.View(); !strings.Contains(v, "LGTM, ship it") || !strings.Contains(v, "post") {
+		t.Errorf("confirm view should show review + post prompt:\n%s", v)
+	}
+
+	// Press 'y' -> posts.
+	rmodel, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	m = rmodel.(Model)
+	if cmd == nil {
+		t.Fatal("'y' should return a post command")
+	}
+	// Run the returned command to exercise the post.
+	cmd()
+	if !gl.postCalled || gl.posted != "LGTM, ship it" {
+		t.Errorf("post not performed: called=%v body=%q", gl.postCalled, gl.posted)
+	}
+}
+
+func TestReviewFlowDiscard(t *testing.T) {
+	m, gl := reviewModel(t)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m, _ = update(m, reviewMsg(review.Result{Ref: "g/p!1", Text: "some review"}))
+	if m.pendingReview == nil {
+		t.Fatal("should be in confirm state")
+	}
+	// Press 'n' -> discards, nothing posted.
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	if m.pendingReview != nil {
+		t.Error("'n' should clear the pending review")
+	}
+	if gl.postCalled {
+		t.Error("'n' must NOT post anything")
+	}
+}
+
+func TestReviewUnavailableWithoutClaude(t *testing.T) {
+	// No WithReview wiring -> 'c' must not crash and must report unavailable.
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	u2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	if cmd != nil {
+		t.Error("'c' with no reviewer should not start a review")
+	}
+	if !strings.Contains(u2.(Model).status, "unavailable") {
+		t.Errorf("status should note review unavailable, got %q", u2.(Model).status)
+	}
+}
+
+// update is a tiny helper to thread Model through Update in tests.
+func update(m Model, msg tea.Msg) (Model, tea.Cmd) {
+	nm, cmd := m.Update(msg)
+	return nm.(Model), cmd
 }
 
 func TestFetchResultPopulatesRows(t *testing.T) {

@@ -39,6 +39,18 @@ func APIGet(r Runner, path string, retries int) ([]byte, error) {
 	return nil, lastErr
 }
 
+// APIPost runs `glab api -X POST <path>` with the given form fields. Used for
+// the few write operations mrglass performs (e.g. posting an MR note). Writes
+// are NOT retried — a transient-looking failure could have actually succeeded,
+// and we never want to post a duplicate comment.
+func APIPost(r Runner, path string, fields map[string]string) ([]byte, error) {
+	args := []string{"api", "-X", "POST", path}
+	for k, v := range fields {
+		args = append(args, "-f", k+"="+v)
+	}
+	return r.Run(args...)
+}
+
 func isTransient(err error) bool {
 	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "eof") ||

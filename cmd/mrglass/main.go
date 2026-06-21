@@ -11,6 +11,7 @@ import (
 	"github.com/dmitry/mrglass/internal/analyze"
 	"github.com/dmitry/mrglass/internal/config"
 	"github.com/dmitry/mrglass/internal/provider/gitlab"
+	"github.com/dmitry/mrglass/internal/review"
 	"github.com/dmitry/mrglass/internal/tui"
 )
 
@@ -22,6 +23,7 @@ func main() {
 		configPath  = flag.String("config", defaultConfigPath(), "path to config.yaml")
 		statePath   = flag.String("state", ".mrglass-state.json", "path to snapshot state file")
 		noTriage    = flag.Bool("no-triage", false, "disable Claude triage entirely")
+		noReview    = flag.Bool("no-review", false, "disable the Claude MR-review hotkey")
 	)
 	flag.Parse()
 
@@ -51,6 +53,11 @@ func main() {
 	}
 
 	m := tui.New(cfg, p, me, az, *statePath)
+	// Wire the on-demand review feature ('c'): read-only Claude review of the MR
+	// diff, posted only after the user confirms. Needs claude on PATH.
+	if !*noReview && review.Available() {
+		m = m.WithReview(review.NewClaudeReviewer(), p)
+	}
 	prog := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)

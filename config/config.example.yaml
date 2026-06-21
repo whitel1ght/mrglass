@@ -5,6 +5,14 @@ refreshMinutes: 5          # 0 disables auto-refresh
 autoTriage: true
 theme: tokyonight        # tokyonight | default | dracula
 
+# Instruction for the on-demand Claude MR review (the `c` hotkey). The MR diff is
+# appended automatically. Claude runs read-only; the generated review is shown for
+# your confirmation before it's posted to the MR as a comment.
+reviewPrompt: >
+  You are reviewing a GitLab merge request. Given the diff below, write concise,
+  actionable review feedback as a Markdown comment. Group findings by severity
+  (Critical / Important / Minor). If it looks good, say so briefly. No preamble.
+
 sections:
   - title: "Needs My Review"
     filter: 'role == "review_requested" && !draft'

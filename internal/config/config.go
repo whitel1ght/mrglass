@@ -47,7 +47,17 @@ type Config struct {
 	Theme          string           `yaml:"theme"`
 	Sections       []SectionConfig  `yaml:"sections"`
 	Statusline     StatuslineConfig `yaml:"statusline"`
+	// ReviewPrompt is the instruction given to Claude for the on-demand MR
+	// review (the 'c' hotkey). The MR diff is appended to it.
+	ReviewPrompt string `yaml:"reviewPrompt"`
 }
+
+// DefaultReviewPrompt is the built-in MR-review instruction.
+const DefaultReviewPrompt = "You are reviewing a GitLab merge request. " +
+	"Given the diff below, write concise, actionable review feedback as a Markdown " +
+	"comment. Group findings by severity (Critical / Important / Minor); call out " +
+	"bugs, correctness issues, and risky changes first. If it looks good, say so " +
+	"briefly. No preamble — output only the review comment."
 
 func Default() Config {
 	return Config{
@@ -56,6 +66,7 @@ func Default() Config {
 		RefreshMinutes: 5,
 		AutoTriage:     true,
 		Theme:          "tokyonight",
+		ReviewPrompt:   DefaultReviewPrompt,
 		Sections: []SectionConfig{
 			{Title: "Needs My Review", Filter: `role == "review_requested" && !draft`},
 			{Title: "Mine · Approved", Filter: `role == "mine" && len(approvedBy) > 0`},

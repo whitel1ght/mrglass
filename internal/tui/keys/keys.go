@@ -13,6 +13,7 @@ type KeyMap struct {
 	Open        key.Binding
 	Refresh     key.Binding
 	Triage      key.Binding
+	Review      key.Binding
 	ToggleAuto  key.Binding
 	Help        key.Binding
 	Quit        key.Binding
@@ -30,6 +31,7 @@ func Default() KeyMap {
 		Open:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")),
 		Refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 		Triage:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "triage")),
+		Review:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "claude review")),
 		ToggleAuto:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "toggle auto-triage")),
 		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -37,13 +39,13 @@ func Default() KeyMap {
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.NextSection, k.Expand, k.Open, k.Refresh, k.Triage, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.NextSection, k.Expand, k.Open, k.Review, k.Refresh, k.Help, k.Quit}
 }
 
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.Bottom},
 		{k.NextSection, k.PrevSection, k.Expand, k.Open},
-		{k.Refresh, k.Triage, k.ToggleAuto, k.Help, k.Quit},
+		{k.Refresh, k.Triage, k.Review, k.ToggleAuto, k.Help, k.Quit},
 	}
 }

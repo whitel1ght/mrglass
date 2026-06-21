@@ -2,6 +2,7 @@ package gitlab
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -63,5 +64,38 @@ func TestAPIGetDoesNotRetryRealError(t *testing.T) {
 	}
 	if f.n != 1 {
 		t.Errorf("404 should not retry, got %d attempts", f.n)
+	}
+}
+
+func TestMRDiffFormatsChanges(t *testing.T) {
+	body := []byte(`{"changes":[{"old_path":"a.go","new_path":"a.go","diff":"@@ -1 +1 @@\n-x\n+y\n"},{"new_path":"b.go","diff":"@@ +1 @@\n+new\n"}]}`)
+	f := &fakeRunner{outs: [][]byte{body}, errs: []error{nil}}
+	p := &GitLabProvider{R: f}
+	out, err := p.MRDiff(42, 7)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	for _, want := range []string{"--- a.go", "+y", "--- b.go", "+new"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("diff missing %q in:\n%s", want, out)
+		}
+	}
+	// uses the changes endpoint with the right project/iid
+	if got := strings.Join(f.args[0], " "); !strings.Contains(got, "projects/42/merge_requests/7/changes") {
+		t.Errorf("wrong path: %v", f.args[0])
+	}
+}
+
+func TestPostNoteArgs(t *testing.T) {
+	f := &fakeRunner{outs: [][]byte{[]byte(`{"id":1}`)}, errs: []error{nil}}
+	p := &GitLabProvider{R: f}
+	if err := p.PostNote(42, 7, "looks good"); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	got := strings.Join(f.args[0], " ")
+	for _, want := range []string{"-X POST", "projects/42/merge_requests/7/notes", "body=looks good"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("post args missing %q: %v", want, f.args[0])
+		}
 	}
 }

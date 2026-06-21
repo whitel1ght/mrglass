@@ -16,6 +16,7 @@ import (
 	"github.com/dmitry/mrglass/internal/config"
 	"github.com/dmitry/mrglass/internal/core"
 	"github.com/dmitry/mrglass/internal/provider"
+	"github.com/dmitry/mrglass/internal/review"
 	"github.com/dmitry/mrglass/internal/tui/detailpane"
 	"github.com/dmitry/mrglass/internal/tui/keys"
 	"github.com/dmitry/mrglass/internal/tui/section"
@@ -29,12 +30,26 @@ type fetchErrMsg struct{ err error }
 type adviceMsg analyze.Advice
 type tickMsg time.Time
 type openErrMsg struct{ err error }
+type reviewMsg review.Result
+type postResultMsg struct {
+	ref string
+	err error
+}
+
+// pending holds a generated review awaiting the user's post/discard decision.
+type pending struct {
+	ref  string
+	mr   core.MR
+	text string
+}
 
 type Model struct {
 	cfg       config.Config
 	provider  provider.Provider
 	me        string
 	analyzer  analyze.Analyzer // may be nil
+	reviewer  review.Reviewer  // may be nil (no claude)
+	reviewGL  review.GitLab    // forge diff/post capability; may be nil
 	statePath string
 
 	keys   keys.KeyMap
@@ -49,11 +64,22 @@ type Model struct {
 	expanded   map[string]bool // MR ref -> inline detail shown
 	advice     map[string]string
 
+	pendingReview *pending // non-nil while awaiting post/discard confirmation
+	reviewing     bool     // a review is in flight
+
 	autoTriage bool
 	status     string
 	showHelp   bool
 	width      int
 	height     int
+}
+
+// WithReview wires the on-demand Claude review feature. Both must be non-nil for
+// the 'c' hotkey to do anything; main passes nil for either when unavailable.
+func (m Model) WithReview(rv review.Reviewer, gl review.GitLab) Model {
+	m.reviewer = rv
+	m.reviewGL = gl
+	return m
 }
 
 func New(cfg config.Config, p provider.Provider, me string, az analyze.Analyzer, statePath string) Model {
@@ -97,6 +123,25 @@ func (m Model) triageCmd(c core.Change) tea.Cmd {
 	return func() tea.Msg { return adviceMsg(az.Triage(c)) }
 }
 
+// reviewCmd runs a read-only Claude review of the MR's diff. The result is shown
+// for confirmation before anything is posted.
+func (m Model) reviewCmd(mr core.MR) tea.Cmd {
+	rv, gl := m.reviewer, m.reviewGL
+	prompt := m.cfg.ReviewPrompt
+	if prompt == "" {
+		prompt = config.DefaultReviewPrompt
+	}
+	return func() tea.Msg { return reviewMsg(review.Generate(gl, rv, mr, prompt)) }
+}
+
+// postCmd posts a confirmed review as a comment. This is the only GitLab write.
+func (m Model) postCmd(mr core.MR, body string) tea.Cmd {
+	gl := m.reviewGL
+	return func() tea.Msg {
+		return postResultMsg{ref: mr.Ref, err: review.Post(gl, mr, body)}
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -113,6 +158,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case openErrMsg:
 		m.status = "⚠ could not open browser: " + msg.err.Error()
+		return m, nil
+
+	case reviewMsg:
+		m.reviewing = false
+		res := review.Result(msg)
+		if res.Err != nil {
+			m.status = "⚠ review failed: " + res.Err.Error()
+			return m, nil
+		}
+		// Stash the generated review and enter the confirm state; nothing is
+		// posted until the user says yes.
+		mr := m.byRef(res.Ref)
+		if mr == nil {
+			m.status = "⚠ review: MR no longer in list"
+			return m, nil
+		}
+		m.pendingReview = &pending{ref: res.Ref, mr: *mr, text: res.Text}
+		m.status = "review ready — post to MR? [y]es / [n]o"
+		return m, nil
+
+	case postResultMsg:
+		m.pendingReview = nil
+		if msg.err != nil {
+			m.status = "⚠ could not post comment: " + msg.err.Error()
+		} else {
+			m.status = "✓ review posted to " + msg.ref
+		}
 		return m, nil
 
 	case fetchResultMsg:
@@ -172,6 +244,24 @@ func (m *Model) refilter() {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Confirm state takes over the keyboard: a generated review awaits a
+	// post/discard decision. Only ctrl+c escapes to quit.
+	if m.pendingReview != nil {
+		switch {
+		case msg.Type == tea.KeyCtrlC:
+			return m, tea.Quit
+		case msg.String() == "y":
+			p := m.pendingReview
+			m.status = "posting review…"
+			return m, m.postCmd(p.mr, p.text)
+		case msg.String() == "n", msg.Type == tea.KeyEsc:
+			m.pendingReview = nil
+			m.status = "review discarded"
+			return m, nil
+		}
+		return m, nil // swallow everything else while confirming
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
@@ -234,8 +324,29 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.triageCmd(c)
 		}
 		return m, nil
+	case key.Matches(msg, m.keys.Review):
+		if m.reviewer == nil || m.reviewGL == nil {
+			m.status = "review unavailable (claude not found)"
+			return m, nil
+		}
+		if mr := m.selected(); mr != nil && !m.reviewing {
+			m.reviewing = true
+			m.status = "reviewing " + mr.Ref + "…"
+			return m, m.reviewCmd(*mr)
+		}
+		return m, nil
 	}
 	return m, nil
+}
+
+// byRef returns the MR with the given ref from the full fetched list, or nil.
+func (m Model) byRef(ref string) *core.MR {
+	for i := range m.allMRs {
+		if m.allMRs[i].Ref == ref {
+			return &m.allMRs[i]
+		}
+	}
+	return nil
 }
 
 func (m Model) selected() *core.MR {
@@ -272,12 +383,30 @@ func openURL(url string) tea.Cmd {
 	}
 }
 
+// reviewConfirmView shows the generated review and the post/discard prompt.
+func (m Model) reviewConfirmView() string {
+	p := m.pendingReview
+	header := m.styles.Header.Render("Claude review — " + p.ref)
+	hint := m.styles.Help.Render("Review this comment, then: [y] post to GitLab · [n]/esc discard")
+	bodyHeight := m.height - lipgloss.Height(header) - lipgloss.Height(hint) - 2
+	if bodyHeight < 1 {
+		bodyHeight = 1
+	}
+	body := lipgloss.NewStyle().
+		Width(m.width).Height(bodyHeight).
+		Render(m.styles.Base.Render(p.text))
+	return strings.Join([]string{header, "", body, hint}, "\n")
+}
+
 func (m Model) View() string {
 	if m.width == 0 {
 		return "loading…"
 	}
 	if m.showHelp {
 		return m.help.FullHelpView(m.keys.FullHelp())
+	}
+	if m.pendingReview != nil {
+		return m.reviewConfirmView()
 	}
 
 	// tabs, each with a count badge of how many MRs match it (once loaded).
