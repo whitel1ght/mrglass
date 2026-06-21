@@ -142,9 +142,6 @@ func (m *Model) applyMRs(all []core.MR) {
 		filter = m.cfg.Sections[m.sectionIdx].Filter
 	}
 	matched := section.Filter(filter, all)
-	if len(matched) == 0 {
-		matched = all
-	}
 	keysOrder, groups := section.GroupByTicket(matched)
 	var flat []core.MR
 	for _, k := range keysOrder {
@@ -195,7 +192,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.status = "refreshing…"
 		return m, m.fetchCmd()
 	case key.Matches(msg, m.keys.ToggleAuto):
-		m.autoTriage = !m.autoTriage
+		m.autoTriage = !m.autoTriage && m.analyzer != nil
 		return m, nil
 	case key.Matches(msg, m.keys.Open):
 		if mr := m.selected(); mr != nil {
@@ -293,9 +290,3 @@ func (m Model) View() string {
 	return strings.Join([]string{tabBar, body, status, helpBar}, "\n")
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
