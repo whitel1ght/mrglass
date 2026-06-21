@@ -205,10 +205,21 @@ func (cr ClaudeReviewer) reviewPlain(req ReviewReq) Result {
 // stream-json) that the skill actually ran, reporting it on the Result. Skills
 // may dispatch subagents, so the tool allowlist is wider — but still has no
 // write/GitLab capability; posting stays gated on user confirmation.
+// draftOnlyGuard neutralizes a review skill's own "then post" / approval step so
+// mrglass remains the single post gate. Review skills (e.g. mr-review) post to
+// GitLab themselves and ask their own "want me to post?" — we don't want that
+// double gate, nor an unconfirmed write. mrglass posts via glab only after the
+// user confirms in the TUI.
+const draftOnlyGuard = "IMPORTANT: Produce the review text ONLY. Do NOT post anything " +
+	"to GitLab, do NOT run glab, do NOT ask whether to post, and do NOT take any " +
+	"write/approve/label action — the calling tool handles posting after the user " +
+	"confirms. Your entire output should be just the review comment, ready to post."
+
 func (cr ClaudeReviewer) reviewWithSkill(req ReviewReq) Result {
 	instr := fmt.Sprintf(
 		"Use the Skill tool to invoke the %q skill, then apply it to review this "+
-			"merge request. %s", req.Skill, reviewPrompt(req.Prompt, req.MR, req.Diff))
+			"merge request. %s\n\n%s", req.Skill, draftOnlyGuard,
+		reviewPrompt(req.Prompt, req.MR, req.Diff))
 	args := []string{
 		"-p", instr,
 		"--output-format", "stream-json", "--verbose",

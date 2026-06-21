@@ -195,6 +195,10 @@ func TestClaudeReviewerWithSkillUsesStreamAndReports(t *testing.T) {
 	if !strings.Contains(f.in, "Skill tool") || !strings.Contains(f.in, "superpowers:requesting-code-review") {
 		t.Errorf("prompt should instruct invoking the skill: %q", f.in)
 	}
+	// draft-only guard: the skill must not post / ask to post itself
+	if !strings.Contains(f.in, "Do NOT post") {
+		t.Errorf("skill prompt should carry the draft-only guard: %q", f.in)
+	}
 }
 
 func TestClaudeReviewerSkillPassesPluginDirs(t *testing.T) {
