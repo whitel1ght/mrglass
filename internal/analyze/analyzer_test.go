@@ -53,3 +53,17 @@ func TestTriageNotWorthyNewOrGone(t *testing.T) {
 		t.Error("gone MR should not be triage-worthy")
 	}
 }
+
+func TestTriageWorthyApprovalLost(t *testing.T) {
+	c := changed(core.FieldChange{Field: "approved_by", Old: []string{"alice", "bob"}, New: []string{"alice"}})
+	if !IsTriageWorthy(c) {
+		t.Error("approval lost (bob removed) should be triage-worthy")
+	}
+}
+
+func TestTriageNotWorthyApprovalGainedOnly(t *testing.T) {
+	c := changed(core.FieldChange{Field: "approved_by", Old: []string{"alice"}, New: []string{"alice", "bob"}})
+	if IsTriageWorthy(c) {
+		t.Error("approval gained only should NOT be triage-worthy")
+	}
+}
