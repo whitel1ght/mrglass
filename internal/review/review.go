@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/dmitry/mrglass/internal/core"
@@ -118,7 +119,18 @@ func (ExecCmdRunner) Run(stdin, dir string, args ...string) ([]byte, error) {
 	if dir != "" {
 		cmd.Dir = dir // run inside the project worktree for full context
 	}
-	return cmd.Output()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	// Return stdout REGARDLESS of exit code: claude often exits non-zero while
+	// still printing a JSON result with a useful is_error message (e.g. "Not
+	// logged in"). The caller parses stdout first; only if that yields nothing
+	// do we fall back to this error (with stderr folded in so it isn't lost).
+	if err != nil && stderr.Len() > 0 {
+		err = fmt.Errorf("%v: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.Bytes(), err
 }
 
 // ClaudeReviewer reviews via the Claude Code CLI, headless and READ-ONLY.
@@ -142,30 +154,37 @@ func (cr ClaudeReviewer) Review(mr core.MR, diff, prompt, dir string) Result {
 		"--output-format", "json",
 		"--allowedTools", "Read",
 	}
-	// In a project worktree we WANT the repo's CLAUDE.md and .claude/skills, so
-	// don't pass --bare (which skips that discovery). For a diff-only review with
-	// no project on disk, --bare keeps it fast.
-	if dir == "" {
-		args = append(args, "--bare")
+	out, runErr := cr.R.Run(full, dir, args...)
+	// Parse stdout FIRST even on a non-zero exit: claude commonly exits 1 while
+	// still emitting a JSON result whose is_error message ("Not logged in", a
+	// quota error, …) is far more useful than the bare exit code.
+	text, validJSON, perr := parseResult(out)
+	if perr == nil {
+		return Result{Ref: mr.Ref, Text: text}
 	}
-	out, err := cr.R.Run(full, dir, args...)
-	if err != nil {
-		return Result{Ref: mr.Ref, Err: err}
+	// If stdout was valid JSON, its message (is_error / no-result) is the real
+	// reason — prefer it over the opaque process exit code. Only when stdout is
+	// unusable do we fall back to the process error (which carries stderr).
+	if validJSON {
+		return Result{Ref: mr.Ref, Err: perr}
 	}
-	text, err := parseResult(out)
-	if err != nil {
-		return Result{Ref: mr.Ref, Err: err}
+	if runErr != nil {
+		return Result{Ref: mr.Ref, Err: runErr}
 	}
-	return Result{Ref: mr.Ref, Text: text}
+	return Result{Ref: mr.Ref, Err: perr}
 }
 
-func parseResult(raw []byte) (string, error) {
+// parseResult parses claude's --output-format json envelope. The bool reports
+// whether the payload was valid JSON at all (vs. garbage/empty) — the caller
+// uses it to decide whether a JSON is_error message should win over a non-zero
+// process exit code.
+func parseResult(raw []byte) (text string, validJSON bool, err error) {
 	var env struct {
 		Result  string `json:"result"`
 		IsError bool   `json:"is_error"`
 	}
-	if err := json.Unmarshal(raw, &env); err != nil {
-		return "", err
+	if e := json.Unmarshal(raw, &env); e != nil {
+		return "", false, e
 	}
 	// Claude reports failures (not logged in, rate limited, refusals) via
 	// is_error with the message in result. Never treat those as a review —
@@ -175,10 +194,10 @@ func parseResult(raw []byte) (string, error) {
 		if msg == "" {
 			msg = "claude reported an error"
 		}
-		return "", fmt.Errorf("claude: %s", msg)
+		return "", true, fmt.Errorf("claude: %s", msg)
 	}
 	if env.Result == "" {
-		return "", fmt.Errorf("claude returned no result")
+		return "", true, fmt.Errorf("claude returned no result")
 	}
-	return env.Result, nil
+	return env.Result, true, nil
 }

@@ -114,7 +114,7 @@ func TestClaudeReviewerReadOnlyFlags(t *testing.T) {
 		t.Errorf("text = %q", res.Text)
 	}
 	joined := strings.Join(f.args, " ")
-	for _, want := range []string{"-p", "--output-format", "json", "--allowedTools", "--bare"} {
+	for _, want := range []string{"-p", "--output-format", "json", "--allowedTools"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("args missing %q: %s", want, joined)
 		}
@@ -135,6 +135,31 @@ func TestClaudeReviewerSubprocessError(t *testing.T) {
 	f := &fakeCmd{err: errors.New("claude died")}
 	if res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", ""); res.Err == nil {
 		t.Error("subprocess error should surface")
+	}
+}
+
+func TestClaudeReviewerStdoutWinsOverExitCode(t *testing.T) {
+	// claude exits 1 but still prints a JSON is_error to stdout. The useful
+	// message must surface, not the bare "exit status 1".
+	f := &fakeCmd{
+		out: []byte(`{"is_error":true,"result":"Not logged in · Please run /login"}`),
+		err: errors.New("exit status 1"),
+	}
+	res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", "")
+	if res.Err == nil {
+		t.Fatal("want error")
+	}
+	if !strings.Contains(res.Err.Error(), "Not logged in") {
+		t.Errorf("is_error message should win over exit code, got: %v", res.Err)
+	}
+}
+
+func TestClaudeReviewerExitErrorWhenNoStdout(t *testing.T) {
+	// Non-zero exit with no parseable stdout -> the process error surfaces.
+	f := &fakeCmd{out: []byte(""), err: errors.New("exit status 1: some stderr")}
+	res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", "")
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "stderr") {
+		t.Errorf("process error (with stderr) should surface, got: %v", res.Err)
 	}
 }
 
