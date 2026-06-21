@@ -53,6 +53,20 @@ func TestTriageHappyPath(t *testing.T) {
 	}
 }
 
+func TestParseResultEmptyResultErrors(t *testing.T) {
+	_, err := parseResult([]byte("{}"))
+	if err == nil {
+		t.Error("expected error for empty result, got nil")
+	}
+}
+
+func TestParseResultMalformed(t *testing.T) {
+	_, err := parseResult([]byte("not json"))
+	if err == nil {
+		t.Error("expected error for malformed JSON, got nil")
+	}
+}
+
 func TestTriageSubprocessError(t *testing.T) {
 	f := &fakeCmd{err: errors.New("claude exploded")}
 	cc := ClaudeCode{R: f}

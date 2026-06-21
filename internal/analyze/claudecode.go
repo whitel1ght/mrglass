@@ -43,7 +43,7 @@ func Available() bool {
 
 func (cc ClaudeCode) Triage(c core.Change) Advice {
 	prompt := buildPrompt(c)
-	out, err := cc.R.Run(prompt,
+	out, err := cc.R.Run("",
 		"-p", prompt,
 		"--output-format", "json",
 		"--allowedTools", "Read",
@@ -74,6 +74,9 @@ func parseResult(raw []byte) (string, error) {
 	}
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return "", err
+	}
+	if env.Result == "" {
+		return "", fmt.Errorf("claude returned no result")
 	}
 	return env.Result, nil
 }
