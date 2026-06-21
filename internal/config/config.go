@@ -50,6 +50,15 @@ type Config struct {
 	// ReviewPrompt is the instruction given to Claude for the on-demand MR
 	// review (the 'c' hotkey). The MR diff is appended to it.
 	ReviewPrompt string `yaml:"reviewPrompt"`
+	// ProjectsDir is the base directory holding your local clones. When set, the
+	// review runs with full project context: mrglass finds the matching clone,
+	// checks out the MR branch in a throwaway git worktree (your working copy is
+	// never touched), and runs Claude there so it sees the repo's CLAUDE.md,
+	// .claude/skills, and all files. Empty -> diff-only review.
+	ProjectsDir string `yaml:"projectsDir"`
+	// ProjectPaths overrides the clone location per MR project path
+	// (e.g. "group/repo": "/abs/path"). Takes precedence over ProjectsDir.
+	ProjectPaths map[string]string `yaml:"projectPaths"`
 }
 
 // DefaultReviewPrompt is the built-in MR-review instruction.

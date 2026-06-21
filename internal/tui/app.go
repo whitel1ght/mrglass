@@ -123,15 +123,22 @@ func (m Model) triageCmd(c core.Change) tea.Cmd {
 	return func() tea.Msg { return adviceMsg(az.Triage(c)) }
 }
 
-// reviewCmd runs a read-only Claude review of the MR's diff. The result is shown
-// for confirmation before anything is posted.
+// reviewCmd runs a read-only Claude review of the MR. When a local clone is
+// configured, it reviews the MR branch in a throwaway worktree with full project
+// context; otherwise it falls back to diff-only. The result is shown for
+// confirmation before anything is posted.
 func (m Model) reviewCmd(mr core.MR) tea.Cmd {
 	rv, gl := m.reviewer, m.reviewGL
 	prompt := m.cfg.ReviewPrompt
 	if prompt == "" {
 		prompt = config.DefaultReviewPrompt
 	}
-	return func() tea.Msg { return reviewMsg(review.Generate(gl, rv, mr, prompt)) }
+	opts := review.Options{
+		ProjectsDir:  m.cfg.ProjectsDir,
+		ProjectPaths: m.cfg.ProjectPaths,
+		Worktree:     review.GitWorktree{},
+	}
+	return func() tea.Msg { return reviewMsg(review.Generate(gl, rv, mr, prompt, opts)) }
 }
 
 // postCmd posts a confirmed review as a comment. This is the only GitLab write.
@@ -175,7 +182,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.pendingReview = &pending{ref: res.Ref, mr: *mr, text: res.Text}
-		m.status = "review ready — post to MR? [y]es / [n]o"
+		ctxNote := "diff-only"
+		if res.LocalContext {
+			ctxNote = "full project context"
+		}
+		m.status = "review ready (" + ctxNote + ") — post to MR? [y]es / [n]o"
 		return m, nil
 
 	case postResultMsg:

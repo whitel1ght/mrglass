@@ -13,6 +13,17 @@ reviewPrompt: >
   actionable review feedback as a Markdown comment. Group findings by severity
   (Critical / Important / Minor). If it looks good, say so briefly. No preamble.
 
+# Local project context for reviews (optional but recommended). When projectsDir
+# is set, the `c` review finds your local clone of the MR's repo, checks out the
+# MR branch in a THROWAWAY git worktree (your working copy is never touched — no
+# stash, no branch switch), and runs Claude there. Claude then sees the repo's
+# CLAUDE.md, .claude/skills, and all files — a real project-aware review instead
+# of diff-only. If no clone is found, it falls back to diff-only automatically.
+projectsDir: ~/projects
+# Per-project overrides for odd layouts/names (key = MR's "group/repo"):
+# projectPaths:
+#   ecfx/ecfx-dashboard: ~/work/dashboard
+
 sections:
   - title: "Needs My Review"
     filter: 'role == "review_requested" && !draft'

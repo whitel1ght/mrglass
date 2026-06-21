@@ -28,19 +28,33 @@ type GitLab interface {
 
 // Result is the outcome of generating a review (before posting).
 type Result struct {
-	Ref  string
-	Text string
-	Err  error
+	Ref string
+	// LocalContext is true when the review ran inside a checkout of the project
+	// (full repo context: CLAUDE.md, skills, all files); false for diff-only.
+	LocalContext bool
+	Text         string
+	Err          error
 }
 
-// Reviewer turns an MR diff into review text via Claude.
+// Reviewer turns an MR diff into review text via Claude. dir is the working
+// directory to run Claude in (the project worktree for full context, or "" for
+// a diff-only review with no project on disk).
 type Reviewer interface {
-	Review(mr core.MR, diff, prompt string) Result
+	Review(mr core.MR, diff, prompt, dir string) Result
 }
 
-// Generate fetches the MR diff and asks the reviewer to produce review text. It
-// does NOT post anything — posting is a separate, user-confirmed step.
-func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string) Result {
+// Options configures Generate's local-context behavior.
+type Options struct {
+	ProjectsDir  string
+	ProjectPaths map[string]string
+	Worktree     Worktree // how to make an isolated checkout; nil -> diff-only
+}
+
+// Generate fetches the MR diff and asks the reviewer to produce review text. If
+// a local clone is found (per opts), it runs Claude inside a throwaway worktree
+// of the MR branch so Claude has full project context; otherwise it falls back
+// to a diff-only review. It never posts — posting is a separate, confirmed step.
+func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string, opts Options) Result {
 	diff, err := gl.MRDiff(mr.ProjectID, mr.IID)
 	if err != nil {
 		return Result{Ref: mr.Ref, Err: fmt.Errorf("fetch diff: %w", err)}
@@ -51,7 +65,26 @@ func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string) Result {
 	if len(diff) > maxDiffChars {
 		diff = diff[:maxDiffChars] + "\n…(diff truncated)…"
 	}
-	return rv.Review(mr, diff, prompt)
+
+	dir := ""
+	local := false
+	if opts.Worktree != nil {
+		if repoDir, ok := ResolveDir(mr, opts.ProjectsDir, opts.ProjectPaths); ok {
+			wt, cleanup, err := opts.Worktree.Prepare(repoDir, mr.IID)
+			if err != nil {
+				// Couldn't prepare the worktree — degrade to diff-only rather
+				// than failing the whole review.
+				dir = ""
+			} else {
+				defer cleanup()
+				dir, local = wt, true
+			}
+		}
+	}
+
+	res := rv.Review(mr, diff, prompt, dir)
+	res.LocalContext = local && res.Err == nil
+	return res
 }
 
 // Post writes the (confirmed) review text as a comment on the MR.
@@ -59,20 +92,24 @@ func Post(gl GitLab, mr core.MR, body string) error {
 	return gl.PostNote(mr.ProjectID, mr.IID, body)
 }
 
-// CmdRunner runs the claude CLI with stdin and args. Fakeable in tests.
+// CmdRunner runs the claude CLI with stdin, a working directory (empty = current),
+// and args. Fakeable in tests.
 type CmdRunner interface {
-	Run(stdin string, args ...string) ([]byte, error)
+	Run(stdin, dir string, args ...string) ([]byte, error)
 }
 
 // ExecCmdRunner runs the real claude binary with a generous timeout (an agentic
 // review takes longer than a triage).
 type ExecCmdRunner struct{}
 
-func (ExecCmdRunner) Run(stdin string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+func (ExecCmdRunner) Run(stdin, dir string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "claude", args...)
 	cmd.Stdin = bytes.NewBufferString(stdin)
+	if dir != "" {
+		cmd.Dir = dir // run inside the project worktree for full context
+	}
 	return cmd.Output()
 }
 
@@ -89,15 +126,21 @@ func Available() bool {
 	return err == nil
 }
 
-func (cr ClaudeReviewer) Review(mr core.MR, diff, prompt string) Result {
+func (cr ClaudeReviewer) Review(mr core.MR, diff, prompt, dir string) Result {
 	full := fmt.Sprintf("%s\n\nMerge request: %s — %q\n\nDIFF:\n%s",
 		prompt, mr.Ref, mr.Title, diff)
-	out, err := cr.R.Run(full,
+	args := []string{
 		"-p", full,
 		"--output-format", "json",
 		"--allowedTools", "Read",
-		"--bare",
-	)
+	}
+	// In a project worktree we WANT the repo's CLAUDE.md and .claude/skills, so
+	// don't pass --bare (which skips that discovery). For a diff-only review with
+	// no project on disk, --bare keeps it fast.
+	if dir == "" {
+		args = append(args, "--bare")
+	}
+	out, err := cr.R.Run(full, dir, args...)
 	if err != nil {
 		return Result{Ref: mr.Ref, Err: err}
 	}

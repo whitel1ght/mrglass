@@ -26,11 +26,12 @@ func (f *fakeGitLab) PostNote(_, _ int, body string) error {
 type fakeReviewer struct {
 	gotDiff   string
 	gotPrompt string
+	gotDir    string
 	result    Result
 }
 
-func (f *fakeReviewer) Review(_ core.MR, diff, prompt string) Result {
-	f.gotDiff, f.gotPrompt = diff, prompt
+func (f *fakeReviewer) Review(_ core.MR, diff, prompt, dir string) Result {
+	f.gotDiff, f.gotPrompt, f.gotDir = diff, prompt, dir
 	return f.result
 }
 
@@ -39,7 +40,7 @@ func mr() core.MR { return core.MR{Ref: "g/p!1", IID: 1, ProjectID: 9, Title: "t
 func TestGenerateFeedsDiffAndPrompt(t *testing.T) {
 	gl := &fakeGitLab{diff: "some diff"}
 	rv := &fakeReviewer{result: Result{Ref: "g/p!1", Text: "looks good"}}
-	res := Generate(gl, rv, mr(), "REVIEW PROMPT")
+	res := Generate(gl, rv, mr(), "REVIEW PROMPT", Options{})
 	if res.Err != nil {
 		t.Fatalf("err: %v", res.Err)
 	}
@@ -54,14 +55,14 @@ func TestGenerateFeedsDiffAndPrompt(t *testing.T) {
 func TestGenerateDiffErrorSurfaces(t *testing.T) {
 	gl := &fakeGitLab{diffErr: errors.New("boom")}
 	rv := &fakeReviewer{}
-	if res := Generate(gl, rv, mr(), "p"); res.Err == nil {
+	if res := Generate(gl, rv, mr(), "p", Options{}); res.Err == nil {
 		t.Error("diff error should surface")
 	}
 }
 
 func TestGenerateEmptyDiffIsError(t *testing.T) {
 	gl := &fakeGitLab{diff: ""}
-	if res := Generate(gl, &fakeReviewer{}, mr(), "p"); res.Err == nil {
+	if res := Generate(gl, &fakeReviewer{}, mr(), "p", Options{}); res.Err == nil {
 		t.Error("empty diff should be an error, not a review")
 	}
 }
@@ -69,7 +70,7 @@ func TestGenerateEmptyDiffIsError(t *testing.T) {
 func TestGenerateTruncatesHugeDiff(t *testing.T) {
 	gl := &fakeGitLab{diff: strings.Repeat("x", maxDiffChars+5000)}
 	rv := &fakeReviewer{result: Result{Text: "ok"}}
-	Generate(gl, rv, mr(), "p")
+	Generate(gl, rv, mr(), "p", Options{})
 	if len(rv.gotDiff) > maxDiffChars+50 {
 		t.Errorf("diff should be truncated, got %d chars", len(rv.gotDiff))
 	}
@@ -97,7 +98,7 @@ type fakeCmd struct {
 	in   string
 }
 
-func (f *fakeCmd) Run(stdin string, args ...string) ([]byte, error) {
+func (f *fakeCmd) Run(stdin, dir string, args ...string) ([]byte, error) {
 	f.in, f.args = stdin, args
 	return f.out, f.err
 }
@@ -105,7 +106,7 @@ func (f *fakeCmd) Run(stdin string, args ...string) ([]byte, error) {
 func TestClaudeReviewerReadOnlyFlags(t *testing.T) {
 	f := &fakeCmd{out: []byte(`{"result":"a review"}`)}
 	cr := ClaudeReviewer{R: f}
-	res := cr.Review(mr(), "diff here", "be concise")
+	res := cr.Review(mr(), "diff here", "be concise", "")
 	if res.Err != nil {
 		t.Fatalf("err: %v", res.Err)
 	}
@@ -132,7 +133,7 @@ func TestClaudeReviewerReadOnlyFlags(t *testing.T) {
 
 func TestClaudeReviewerSubprocessError(t *testing.T) {
 	f := &fakeCmd{err: errors.New("claude died")}
-	if res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p"); res.Err == nil {
+	if res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", ""); res.Err == nil {
 		t.Error("subprocess error should surface")
 	}
 }
@@ -141,7 +142,7 @@ func TestClaudeReviewerIsErrorNotTreatedAsReview(t *testing.T) {
 	// claude can exit 0 but report is_error:true (e.g. "Not logged in"). That
 	// message must NOT become a review (it would otherwise be posted to the MR).
 	f := &fakeCmd{out: []byte(`{"type":"result","is_error":true,"result":"Not logged in · Please run /login"}`)}
-	res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p")
+	res := (ClaudeReviewer{R: f}).Review(mr(), "d", "p", "")
 	if res.Err == nil {
 		t.Fatal("is_error result must surface as an error, not a review")
 	}
