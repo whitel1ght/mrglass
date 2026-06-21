@@ -94,6 +94,42 @@ func TestEmptyBeforeLoadShowsLoadingNotNoMatches(t *testing.T) {
 	}
 }
 
+func TestEnterExpandsAndCollapsesInline(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 40
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	item.SourceBranch = "you/feature"
+	item.TargetBranch = "main"
+	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = updated.(Model)
+
+	// Collapsed: detail (branch line) not shown; disclosure is ▸.
+	if v := m.View(); strings.Contains(v, "you/feature → main") {
+		t.Errorf("collapsed row should not show detail:\n%s", v)
+	}
+	if v := m.View(); !strings.Contains(v, "▸") {
+		t.Errorf("collapsed row should show ▸ disclosure:\n%s", v)
+	}
+
+	// Press enter -> expands: detail visible, disclosure ▾.
+	exp, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = exp.(Model)
+	if v := m.View(); !strings.Contains(v, "you/feature → main") {
+		t.Errorf("expanded row should show the branch detail:\n%s", v)
+	}
+	if v := m.View(); !strings.Contains(v, "▾") {
+		t.Errorf("expanded row should show ▾ disclosure:\n%s", v)
+	}
+
+	// Press enter again -> collapses.
+	col, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = col.(Model)
+	if v := m.View(); strings.Contains(v, "you/feature → main") {
+		t.Errorf("re-collapsed row should hide the detail again:\n%s", v)
+	}
+}
+
 func TestOpenKeyReturnsCommandWithoutSuspending(t *testing.T) {
 	m := newTestModel()
 	m.width, m.height = 100, 30

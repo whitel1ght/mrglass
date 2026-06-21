@@ -45,7 +45,8 @@ type Model struct {
 	mrs        []core.MR // current active-section rows (flattened, grouped order)
 	cursor     int
 	sectionIdx int
-	loaded     bool // true once the first fetch has returned
+	loaded     bool            // true once the first fetch has returned
+	expanded   map[string]bool // MR ref -> inline detail shown
 	advice     map[string]string
 
 	autoTriage bool
@@ -61,6 +62,7 @@ func New(cfg config.Config, p provider.Provider, me string, az analyze.Analyzer,
 		keys: keys.Default(), help: help.New(),
 		styles:     theme.BuildStyles(theme.Get(cfg.Theme)),
 		advice:     map[string]string{},
+		expanded:   map[string]bool{},
 		autoTriage: cfg.AutoTriage && az != nil,
 		status:     "loading…",
 	}
@@ -212,6 +214,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.ToggleAuto):
 		m.autoTriage = !m.autoTriage && m.analyzer != nil
 		return m, nil
+	case key.Matches(msg, m.keys.Expand):
+		if mr := m.selected(); mr != nil {
+			if m.expanded[mr.Ref] {
+				delete(m.expanded, mr.Ref)
+			} else {
+				m.expanded[mr.Ref] = true
+			}
+		}
+		return m, nil
 	case key.Matches(msg, m.keys.Open):
 		if mr := m.selected(); mr != nil {
 			return m, openURL(mr.URL)
@@ -269,9 +280,6 @@ func (m Model) View() string {
 		return m.help.FullHelpView(m.keys.FullHelp())
 	}
 
-	listWidth := m.width * 6 / 10
-	detailWidth := m.width - listWidth - 1
-
 	// tabs
 	var tabs []string
 	for i, s := range m.cfg.Sections {
@@ -285,7 +293,14 @@ func (m Model) View() string {
 	}
 	tabBar := strings.Join(tabs, " ")
 
-	// list
+	// Full-width list. Each MR is one line, prefixed with a disclosure marker
+	// (▸ collapsed / ▾ expanded). An expanded MR shows its detail indented
+	// directly beneath. The statusline row width leaves room for the 2-col
+	// marker prefix.
+	rowWidth := m.width - 2
+	if rowWidth < 1 {
+		rowWidth = 1
+	}
 	var rows []string
 	lastTicket := ""
 	for i, mr := range m.mrs {
@@ -293,8 +308,21 @@ func (m Model) View() string {
 			rows = append(rows, m.styles.Header.Render(mr.TicketKey))
 			lastTicket = mr.TicketKey
 		}
+		open := m.expanded[mr.Ref]
+		marker := "▸ "
+		if open {
+			marker = "▾ "
+		}
+		if i == m.cursor {
+			marker = m.styles.Accent.Render(marker)
+		} else {
+			marker = m.styles.Subtle.Render(marker)
+		}
 		rv := statusline.RowView{MR: mr, HasAdvice: m.advice[mr.Ref] != "", ApprovalsRequired: mr.ApprovalsRequired}
-		rows = append(rows, statusline.Render(m.cfg.Statusline, m.styles, rv, listWidth, i == m.cursor))
+		rows = append(rows, marker+statusline.Render(m.cfg.Statusline, m.styles, rv, rowWidth, i == m.cursor))
+		if open {
+			rows = append(rows, detailpane.Render(m.styles, mr, m.advice[mr.Ref]))
+		}
 	}
 	if len(rows) == 0 {
 		if m.loaded {
@@ -304,12 +332,6 @@ func (m Model) View() string {
 		}
 	}
 	list := strings.Join(rows, "\n")
-
-	// detail
-	detail := ""
-	if mr := m.selected(); mr != nil {
-		detail = detailpane.Render(m.styles, *mr, m.advice[mr.Ref], detailWidth)
-	}
 
 	auto := "OFF"
 	if m.autoTriage {
@@ -327,12 +349,7 @@ func (m Model) View() string {
 	if bodyHeight < 1 {
 		bodyHeight = 1
 	}
-
-	pane := lipgloss.NewStyle().Height(bodyHeight)
-	body := lipgloss.JoinHorizontal(lipgloss.Top,
-		pane.Width(listWidth).Render(list),
-		pane.Width(detailWidth).Render(detail),
-	)
+	body := lipgloss.NewStyle().Height(bodyHeight).Width(m.width).Render(list)
 
 	return strings.Join([]string{tabBar, body, status, helpBar}, "\n")
 }

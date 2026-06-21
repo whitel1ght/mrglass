@@ -63,10 +63,12 @@ func renderSegment(s config.Segment, st theme.Styles, rv RowView) string {
 
 	switch s.Type {
 	case "marker":
+		// Role indicator. Deliberately NOT a triangle — the list prefixes each
+		// row with a ▸/▾ disclosure marker, so a dot/ring keeps the two distinct.
 		if mr.Role == core.RoleMine {
-			text, style = "▸", st.Accent
+			text, style = "●", st.Accent
 		} else {
-			text, style = "◇", st.Subtle
+			text, style = "○", st.Subtle
 		}
 	case "text":
 		text = fieldString(s.Source, mr)

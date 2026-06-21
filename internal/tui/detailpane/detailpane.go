@@ -8,23 +8,46 @@ import (
 	"github.com/dmitry/mrglass/internal/tui/theme"
 )
 
-// Render builds the right-hand detail view for one MR plus any Claude advice.
-func Render(st theme.Styles, mr core.MR, advice string, width int) string {
-	var b strings.Builder
-	b.WriteString(st.Header.Render(mr.Ref) + "\n")
-	b.WriteString(st.Base.Render(mr.Title) + "\n\n")
-	b.WriteString(st.Base.Render(fmt.Sprintf("%s → %s", mr.SourceBranch, mr.TargetBranch)) + "\n")
-	b.WriteString(st.Base.Render("CI: "+dash(mr.CI)) + "\n")
+const indent = "      " // detail lines sit under the row's title
+
+// Render builds the inline detail block shown beneath an expanded MR row:
+// indented, dimmed metadata plus any Claude advice. Returns the lines joined
+// by "\n" (no trailing newline).
+func Render(st theme.Styles, mr core.MR, advice string) string {
+	var lines []string
+	add := func(s string) { lines = append(lines, indent+s) }
+
+	add(st.Subtle.Render(mr.Ref))
+	add(st.Subtle.Render(fmt.Sprintf("%s → %s", mr.SourceBranch, mr.TargetBranch)))
+	add(st.Base.Render("CI: ") + ciText(st, mr.CI))
 	if len(mr.ApprovedBy) > 0 {
-		b.WriteString(st.Base.Render("approved by "+strings.Join(mr.ApprovedBy, ", ")) + "\n")
+		add(st.Success.Render("approved by " + strings.Join(mr.ApprovedBy, ", ")))
+	} else {
+		add(st.Subtle.Render("awaiting approval"))
 	}
 	if mr.Conflicts {
-		b.WriteString(st.Base.Render("⚠ conflicts") + "\n")
+		add(st.Danger.Render("⚠ conflicts"))
+	}
+	if mr.Unresolved {
+		add(st.Warn.Render("unresolved threads"))
 	}
 	if advice != "" {
-		b.WriteString("\n" + st.Advice.Render("💡 "+advice) + "\n")
+		add(st.Advice.Render("💡 " + advice))
 	}
-	return b.String()
+	return strings.Join(lines, "\n")
+}
+
+func ciText(st theme.Styles, status string) string {
+	switch status {
+	case "success":
+		return st.Success.Render("passed")
+	case "failed", "canceled":
+		return st.Danger.Render(dash(status))
+	case "running", "pending", "created", "manual":
+		return st.Warn.Render(dash(status))
+	default:
+		return st.Subtle.Render(dash(status))
+	}
 }
 
 func dash(s string) string {
