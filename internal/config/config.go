@@ -67,7 +67,8 @@ func Default() Config {
 				"ci_failed": {FG: "#e06c75"},
 			},
 			Left: []Segment{
-				{Type: "marker", Source: "role"},
+				// Role is conveyed by the active section/tab, so no per-row role
+				// marker by default. (Add {type: marker} to bring it back.)
 				{Type: "text", Source: "title", Grow: true, MaxWidth: 60},
 			},
 			Right: []Segment{

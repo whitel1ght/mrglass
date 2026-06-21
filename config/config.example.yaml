@@ -18,7 +18,9 @@ statusline:
     selected:  { bg: "#2a2a40", bold: true }
     ci_failed: { fg: "#e06c75" }
   left:
-    - { type: marker, source: role }
+    # Role (mine vs. to-review) is conveyed by the active tab, so there's no
+    # per-row role marker by default. Add `- { type: marker }` to bring it back
+    # (● = authored by you, ○ = assigned/review-requested).
     - { type: text, source: title, grow: true, maxWidth: 60 }
   right:
     - { type: ci, when: 'ci != ""',
