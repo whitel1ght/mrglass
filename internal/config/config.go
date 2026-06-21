@@ -59,7 +59,7 @@ func Default() Config {
 		Sections: []SectionConfig{
 			{Title: "Needs My Review", Filter: `role == "review_requested" && !draft`},
 			{Title: "Mine", Filter: `role == "mine"`},
-			{Title: "Approved & Green", Filter: `len(approvedBy) > 0 && ci == "success"`},
+			{Title: "Approved", Filter: `len(approvedBy) > 0`},
 		},
 		Statusline: StatuslineConfig{
 			States: map[string]StyleConfig{

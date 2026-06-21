@@ -10,8 +10,8 @@ sections:
     filter: 'role == "review_requested" && !draft'
   - title: "Mine"
     filter: 'role == "mine"'
-  - title: "Approved & Green"
-    filter: 'len(approvedBy) > 0 && ci == "success"'
+  - title: "Approved"
+    filter: 'len(approvedBy) > 0'
 
 statusline:
   states:
