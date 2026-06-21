@@ -84,6 +84,14 @@ func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string, opts Options) R
 
 	res := rv.Review(mr, diff, prompt, dir)
 	res.LocalContext = local && res.Err == nil
+	if res.Err != nil {
+		// The status bar truncates; record the full error + mode for diagnosis.
+		mode := "diff-only"
+		if local {
+			mode = "local-context dir=" + dir
+		}
+		logf("review %s (%s) FAILED: %v", mr.Ref, mode, res.Err)
+	}
 	return res
 }
 

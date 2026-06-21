@@ -171,7 +171,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reviewing = false
 		res := review.Result(msg)
 		if res.Err != nil {
-			m.status = "⚠ review failed: " + res.Err.Error()
+			m.status = "⚠ review failed: " + res.Err.Error() + "  (full log: " + review.LogPath() + ")"
 			return m, nil
 		}
 		// Stash the generated review and enter the confirm state; nothing is
