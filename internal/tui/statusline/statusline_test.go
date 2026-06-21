@@ -3,6 +3,7 @@ package statusline
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/dmitry/mrglass/internal/config"
 	"github.com/dmitry/mrglass/internal/core"
@@ -61,4 +62,17 @@ func TestRenderUnknownSegmentDoesNotPanic(t *testing.T) {
 	c := cfg()
 	c.Right = append(c.Right, config.Segment{Type: "bogus"})
 	_ = Render(c, theme.BuildStyles(theme.Get("default")), baseRow(), 80, false)
+}
+
+func TestRenderTruncatesMultibyteTitleSafely(t *testing.T) {
+	rv := baseRow()
+	rv.MR.Title = "café " + strings.Repeat("ü", 80) // 85 runes, all multibyte
+	// Default cfg has maxWidth 60 for the title text segment, so truncation fires.
+	out := Render(cfg(), theme.BuildStyles(theme.Get("default")), rv, 200, false)
+	if !utf8.ValidString(out) {
+		t.Errorf("rendered output is not valid UTF-8: %q", out)
+	}
+	if !strings.Contains(out, "…") {
+		t.Errorf("truncated title should contain ellipsis: %q", out)
+	}
 }

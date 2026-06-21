@@ -60,8 +60,10 @@ func renderSegment(s config.Segment, rv RowView) string {
 		return "◇"
 	case "text":
 		v := fieldString(s.Source, mr)
-		if s.MaxWidth > 0 && len(v) > s.MaxWidth {
-			v = v[:s.MaxWidth-1] + "…"
+		if s.MaxWidth > 0 {
+			if r := []rune(v); len(r) > s.MaxWidth {
+				v = string(r[:s.MaxWidth-1]) + "…"
+			}
 		}
 		return v
 	case "ci":
