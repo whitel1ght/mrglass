@@ -43,8 +43,9 @@ type MR struct {
 
 	CI          string
 	PipelineURL string
-	ApprovedBy  []string
-	Conflicts   bool
+	ApprovedBy         []string
+	ApprovalsRequired  int      // number of approvals GitLab requires (0 = none required)
+	Conflicts          bool
 	Unresolved  bool
 	Comments    int
 	Draft       bool

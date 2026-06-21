@@ -95,11 +95,14 @@ func TestParseApprovals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := parseApprovers(raw)
+	approvers, required, err := parseApprovals(raw)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if len(got) != 1 || got[0] != "alice" {
-		t.Errorf("approvers = %v, want [alice]", got)
+	if len(approvers) != 1 || approvers[0] != "alice" {
+		t.Errorf("approvers = %v, want [alice]", approvers)
+	}
+	if required != 2 {
+		t.Errorf("required = %d, want 2", required)
 	}
 }

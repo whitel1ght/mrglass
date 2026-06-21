@@ -261,7 +261,7 @@ func (m Model) View() string {
 			rows = append(rows, m.styles.Header.Render(mr.TicketKey))
 			lastTicket = mr.TicketKey
 		}
-		rv := statusline.RowView{MR: mr, HasAdvice: m.advice[mr.Ref] != ""}
+		rv := statusline.RowView{MR: mr, HasAdvice: m.advice[mr.Ref] != "", ApprovalsRequired: mr.ApprovalsRequired}
 		rows = append(rows, statusline.Render(m.cfg.Statusline, m.styles, rv, listWidth, i == m.cursor))
 	}
 	if len(rows) == 0 {

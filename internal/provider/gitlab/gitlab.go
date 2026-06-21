@@ -106,12 +106,13 @@ func (p *GitLabProvider) enrich(mr core.MR) core.MR {
 		mr.SetApprovalsOK(false)
 		return mr
 	}
-	approvers, err := parseApprovers(out)
+	approvers, required, err := parseApprovals(out)
 	if err != nil {
 		mr.SetApprovalsOK(false)
 		return mr
 	}
 	mr.ApprovedBy = approvers
+	mr.ApprovalsRequired = required
 	mr.SetApprovalsOK(true)
 	return mr
 }
@@ -124,22 +125,31 @@ func parseMRList(raw []byte) ([]rawMR, error) {
 	return list, nil
 }
 
-func parseApprovers(raw []byte) ([]string, error) {
+// parseApprovals parses both approved_by and approvals_required from the
+// GitLab MR approvals endpoint payload.
+func parseApprovals(raw []byte) (approvers []string, required int, err error) {
 	var a struct {
-		ApprovedBy []struct {
+		ApprovalsRequired int `json:"approvals_required"`
+		ApprovedBy        []struct {
 			User struct {
 				Username string `json:"username"`
 			} `json:"user"`
 		} `json:"approved_by"`
 	}
-	if err := json.Unmarshal(raw, &a); err != nil {
-		return nil, err
+	if err = json.Unmarshal(raw, &a); err != nil {
+		return nil, 0, err
 	}
 	out := make([]string, 0, len(a.ApprovedBy))
 	for _, x := range a.ApprovedBy {
 		out = append(out, x.User.Username)
 	}
-	return out, nil
+	return out, a.ApprovalsRequired, nil
+}
+
+// parseApprovers is a thin wrapper kept for backward compatibility.
+func parseApprovers(raw []byte) ([]string, error) {
+	approvers, _, err := parseApprovals(raw)
+	return approvers, err
 }
 
 func toMR(rm rawMR, me, ticketPattern string) core.MR {
