@@ -1,0 +1,13 @@
+# build output
+/mrglass
+/dist/
+
+# local state
+.mrglass-state.json
+
+# go
+*.test
+*.out
+
+# editor / os
+.DS_Store
