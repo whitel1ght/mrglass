@@ -95,6 +95,37 @@ func TestEmptyBeforeLoadShowsLoadingNotNoMatches(t *testing.T) {
 	}
 }
 
+func TestTabsShowCounts(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	// 2 review MRs (section 0), 1 approved-mine (section 1).
+	r1 := mr("g/p!1", "success")
+	r1.Role = core.RoleReviewRequested
+	r2 := mr("g/p!2", "success")
+	r2.Role = core.RoleReviewRequested
+	mineApproved := mr("g/p!3", "success")
+	mineApproved.Role = core.RoleMine
+	mineApproved.ApprovedBy = []string{"alice"}
+	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{r1, r2, mineApproved}}))
+	v := updated.(Model).View()
+	// "Needs My Review (2)" and "Mine · Approved (1)" should appear.
+	if !strings.Contains(v, "Needs My Review (2)") {
+		t.Errorf("review tab should show count (2):\n%s", v)
+	}
+	if !strings.Contains(v, "Mine · Approved (1)") {
+		t.Errorf("approved-mine tab should show count (1):\n%s", v)
+	}
+}
+
+func TestTabsHaveNoCountBeforeLoad(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	// Before any fetch, tabs must not show "(0)" — counts only appear once loaded.
+	if strings.Contains(m.View(), "(0)") {
+		t.Errorf("tabs should not show counts before the first load:\n%s", m.View())
+	}
+}
+
 func TestEnterExpandsAndCollapsesInline(t *testing.T) {
 	m := newTestModel()
 	m.width, m.height = 100, 40

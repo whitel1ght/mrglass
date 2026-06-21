@@ -280,10 +280,13 @@ func (m Model) View() string {
 		return m.help.FullHelpView(m.keys.FullHelp())
 	}
 
-	// tabs
+	// tabs, each with a count badge of how many MRs match it (once loaded).
 	var tabs []string
 	for i, s := range m.cfg.Sections {
 		label := s.Title
+		if m.loaded {
+			label = fmt.Sprintf("%s (%d)", label, len(section.Filter(s.Filter, m.allMRs)))
+		}
 		if i == m.sectionIdx {
 			label = m.styles.Header.Render("[" + label + "]")
 		} else {
