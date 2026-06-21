@@ -4,6 +4,7 @@ go 1.22.1
 
 require (
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/expr-lang/expr v1.17.8
 	gopkg.in/yaml.v3 v3.0.1
 )
 
