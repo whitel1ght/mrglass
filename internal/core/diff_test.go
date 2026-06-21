@@ -88,3 +88,105 @@ func TestDiffNoChangeIsEmpty(t *testing.T) {
 		t.Errorf("identical snapshots should yield no changes, got %+v", cs)
 	}
 }
+
+func TestDiffConflictsAppearAndClear(t *testing.T) {
+	// Test: Conflicts false → true gives "conflicts appeared"
+	prev := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Conflicts: false}}
+	curr := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Conflicts: true}}
+	c := byRef(Diff(prev, curr), "g/p!1")
+	if c == nil || c.Kind != KindChanged {
+		t.Fatalf("want a KindChanged change, got %+v", c)
+	}
+	found := false
+	for _, f := range c.Fields {
+		if f.Field == "conflicts" && f.Old == false && f.New == true {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("want a conflicts field change false→true, got %+v", c.Fields)
+	}
+	if !strings.Contains(c.Detail, "conflicts appeared") {
+		t.Errorf("Detail %q should contain 'conflicts appeared', got %q", c.Detail, c.Detail)
+	}
+
+	// Test: Conflicts true → false gives "conflicts resolved"
+	prev2 := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Conflicts: true}}
+	curr2 := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Conflicts: false}}
+	c2 := byRef(Diff(prev2, curr2), "g/p!1")
+	if c2 == nil || c2.Kind != KindChanged {
+		t.Fatalf("want a KindChanged change, got %+v", c2)
+	}
+	if !strings.Contains(c2.Detail, "conflicts resolved") {
+		t.Errorf("Detail %q should contain 'conflicts resolved', got %q", c2.Detail, c2.Detail)
+	}
+}
+
+func TestDiffUnresolvedAppearAndClear(t *testing.T) {
+	// Test: Unresolved false → true gives "new unresolved threads"
+	prev := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Unresolved: false}}
+	curr := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Unresolved: true}}
+	c := byRef(Diff(prev, curr), "g/p!1")
+	if c == nil || c.Kind != KindChanged {
+		t.Fatalf("want a KindChanged change, got %+v", c)
+	}
+	found := false
+	for _, f := range c.Fields {
+		if f.Field == "unresolved" && f.Old == false && f.New == true {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("want an unresolved field change false→true, got %+v", c.Fields)
+	}
+	if !strings.Contains(c.Detail, "new unresolved threads") {
+		t.Errorf("Detail %q should contain 'new unresolved threads', got %q", c.Detail, c.Detail)
+	}
+
+	// Test: Unresolved true → false gives "threads resolved"
+	prev2 := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Unresolved: true}}
+	curr2 := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Unresolved: false}}
+	c2 := byRef(Diff(prev2, curr2), "g/p!1")
+	if c2 == nil || c2.Kind != KindChanged {
+		t.Fatalf("want a KindChanged change, got %+v", c2)
+	}
+	if !strings.Contains(c2.Detail, "threads resolved") {
+		t.Errorf("Detail %q should contain 'threads resolved', got %q", c2.Detail, c2.Detail)
+	}
+}
+
+func TestDiffDraftToggle(t *testing.T) {
+	// Test: Draft false → true gives "marked draft"
+	prev := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Draft: false}}
+	curr := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Draft: true}}
+	c := byRef(Diff(prev, curr), "g/p!1")
+	if c == nil || c.Kind != KindChanged {
+		t.Fatalf("want a KindChanged change, got %+v", c)
+	}
+	found := false
+	for _, f := range c.Fields {
+		if f.Field == "draft" && f.Old == false && f.New == true {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("want a draft field change false→true, got %+v", c.Fields)
+	}
+	if !strings.Contains(c.Detail, "marked draft") {
+		t.Errorf("Detail %q should contain 'marked draft', got %q", c.Detail, c.Detail)
+	}
+
+	// Test: Draft true → false gives "marked ready"
+	prev2 := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Draft: true}}
+	curr2 := map[string]Snapshot{"g/p!1": {Ref: "g/p!1", URL: "u", Title: "t", Draft: false}}
+	c2 := byRef(Diff(prev2, curr2), "g/p!1")
+	if c2 == nil || c2.Kind != KindChanged {
+		t.Fatalf("want a KindChanged change, got %+v", c2)
+	}
+	if !strings.Contains(c2.Detail, "marked ready") {
+		t.Errorf("Detail %q should contain 'marked ready', got %q", c2.Detail, c2.Detail)
+	}
+}
