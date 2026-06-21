@@ -45,6 +45,55 @@ func TestFetchResultPopulatesRows(t *testing.T) {
 	}
 }
 
+func TestTabSwitchRefiltersInstantlyWithoutFetch(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 30
+
+	// One MR matching section 0 ("Needs My Review": review_requested) and one
+	// matching section 1 ("Mine": mine).
+	review := mr("g/p!1", "success")
+	review.Role = core.RoleReviewRequested
+	review.Title = "review me"
+	mine := mr("g/p!2", "success")
+	mine.Role = core.RoleMine
+	mine.Title = "mine to ship"
+
+	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{review, mine}}))
+	m = updated.(Model)
+
+	// Section 0 active: only the review MR shows.
+	if v := m.View(); !strings.Contains(v, "review me") || strings.Contains(v, "mine to ship") {
+		t.Fatalf("section 0 should show only the review MR:\n%s", v)
+	}
+
+	// Switch to the next section. This must NOT issue a fetch command (nil cmd)
+	// and must immediately reflect the new section from already-fetched data.
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if cmd != nil {
+		t.Error("switching tabs should not trigger a fetch command (no network round-trip)")
+	}
+	m = next.(Model)
+	if m.sectionIdx != 1 {
+		t.Fatalf("expected sectionIdx 1, got %d", m.sectionIdx)
+	}
+	if v := m.View(); !strings.Contains(v, "mine to ship") || strings.Contains(v, "review me") {
+		t.Errorf("after switch, section 1 should show only the mine MR instantly:\n%s", v)
+	}
+}
+
+func TestEmptyBeforeLoadShowsLoadingNotNoMatches(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 30
+	// No fetch has returned yet -> must say loading, not "No matching MRs."
+	v := m.View()
+	if strings.Contains(v, "No matching MRs.") {
+		t.Error("before first load the empty state must not claim 'No matching MRs.'")
+	}
+	if !strings.Contains(v, "loading…") {
+		t.Errorf("before first load the list should show a loading indicator:\n%s", v)
+	}
+}
+
 func TestViewFillsTerminalHeight(t *testing.T) {
 	const h = 24
 	m := newTestModel()

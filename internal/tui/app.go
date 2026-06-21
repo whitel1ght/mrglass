@@ -40,9 +40,11 @@ type Model struct {
 	help   help.Model
 	styles theme.Styles
 
+	allMRs     []core.MR // full fetched list (provider-agnostic, unfiltered)
 	mrs        []core.MR // current active-section rows (flattened, grouped order)
 	cursor     int
 	sectionIdx int
+	loaded     bool // true once the first fetch has returned
 	advice     map[string]string
 
 	autoTriage bool
@@ -113,6 +115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.applyMRs(res.MRs)
+		m.loaded = true
 		m.status = fmt.Sprintf("%d MRs · refreshed %s", len(res.MRs), time.Now().Format("15:04"))
 		var cmds []tea.Cmd
 		if m.autoTriage && m.analyzer != nil {
@@ -135,13 +138,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// applyMRs stores the full fetched list and recomputes the active-section view.
 func (m *Model) applyMRs(all []core.MR) {
-	// filter to the active section, then flatten in ticket-grouped order
+	m.allMRs = all
+	m.refilter()
+}
+
+// refilter recomputes m.mrs for the active section from the already-fetched
+// allMRs. It does NOT hit the network — sections are client-side filters over
+// the same list, so switching tabs is instant.
+func (m *Model) refilter() {
 	filter := ""
 	if m.sectionIdx < len(m.cfg.Sections) {
 		filter = m.cfg.Sections[m.sectionIdx].Filter
 	}
-	matched := section.Filter(filter, all)
+	matched := section.Filter(filter, m.allMRs)
 	keysOrder, groups := section.GroupByTicket(matched)
 	var flat []core.MR
 	for _, k := range keysOrder {
@@ -180,14 +191,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.cfg.Sections) > 0 {
 			m.sectionIdx = (m.sectionIdx + 1) % len(m.cfg.Sections)
 			m.cursor = 0
+			m.refilter() // instant: re-filter the already-fetched list, no network
 		}
-		return m, m.fetchCmd()
+		return m, nil
 	case key.Matches(msg, m.keys.PrevSection):
 		if n := len(m.cfg.Sections); n > 0 {
 			m.sectionIdx = (m.sectionIdx - 1 + n) % n
 			m.cursor = 0
+			m.refilter()
 		}
-		return m, m.fetchCmd()
+		return m, nil
 	case key.Matches(msg, m.keys.Refresh):
 		m.status = "refreshing…"
 		return m, m.fetchCmd()
@@ -265,7 +278,11 @@ func (m Model) View() string {
 		rows = append(rows, statusline.Render(m.cfg.Statusline, m.styles, rv, listWidth, i == m.cursor))
 	}
 	if len(rows) == 0 {
-		rows = append(rows, m.styles.Footer.Render("No matching MRs."))
+		if m.loaded {
+			rows = append(rows, m.styles.Footer.Render("No matching MRs."))
+		} else {
+			rows = append(rows, m.styles.Footer.Render("loading…"))
+		}
 	}
 	list := strings.Join(rows, "\n")
 
