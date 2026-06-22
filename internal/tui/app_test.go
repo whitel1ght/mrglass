@@ -552,7 +552,7 @@ func TestPostFailureKeepsReviewForRetry(t *testing.T) {
 
 func TestOpenTicketNoBaseURL(t *testing.T) {
 	m := newTestModel()
-	m.cfg.Jira.BaseURL = "" // not configured
+	m.cfg.Tickets.URLTemplate = "" // not configured
 	m.width, m.height = 100, 30
 	item := mr("g/p!1", "success")
 	item.Role = core.RoleReviewRequested
@@ -563,14 +563,14 @@ func TestOpenTicketNoBaseURL(t *testing.T) {
 	if cmd != nil {
 		t.Error("J with no baseURL should not open anything")
 	}
-	if !strings.Contains(u2.(Model).status, "jira.baseURL") {
-		t.Errorf("status should prompt to configure baseURL, got %q", u2.(Model).status)
+	if !strings.Contains(u2.(Model).status, "tickets.urlTemplate") {
+		t.Errorf("status should prompt to configure urlTemplate, got %q", u2.(Model).status)
 	}
 }
 
 func TestOpenTicketNoTicket(t *testing.T) {
 	m := newTestModel()
-	m.cfg.Jira.BaseURL = "https://ecfx.atlassian.net"
+	m.cfg.Tickets.URLTemplate = "https://ecfxdev.atlassian.net/browse/{key}"
 	m.width, m.height = 100, 30
 	item := mr("g/p!1", "success")
 	item.Role = core.RoleReviewRequested
@@ -581,14 +581,14 @@ func TestOpenTicketNoTicket(t *testing.T) {
 	if cmd != nil {
 		t.Error("J on a no-ticket MR should not open anything")
 	}
-	if !strings.Contains(u2.(Model).status, "no Jira ticket") {
+	if !strings.Contains(u2.(Model).status, "no ticket") {
 		t.Errorf("status should note no ticket, got %q", u2.(Model).status)
 	}
 }
 
 func TestOpenTicketOpens(t *testing.T) {
 	m := newTestModel()
-	m.cfg.Jira.BaseURL = "https://ecfx.atlassian.net"
+	m.cfg.Tickets.URLTemplate = "https://ecfxdev.atlassian.net/browse/{key}"
 	m.width, m.height = 100, 30
 	item := mr("g/p!1", "success")
 	item.Role = core.RoleReviewRequested

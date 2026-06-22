@@ -59,11 +59,14 @@ func main() {
 	if !*noReview && review.Available() {
 		m = m.WithReview(review.NewClaudeReviewer(), p)
 	}
-	// Wire inline Jira ticket status (shown when an MR is expanded). Needs
-	// jira.baseURL in config + JIRA_EMAIL/JIRA_API_TOKEN in the env; absent →
-	// feature off, open-in-browser (J) still works.
-	if jiraEmail, jiraToken := jira.FromEnv(); jira.Configured(cfg.Jira.BaseURL, jiraEmail, jiraToken) {
-		m = m.WithJira(jira.HTTPClient{BaseURL: cfg.Jira.BaseURL, Email: jiraEmail, Token: jiraToken})
+	// Wire inline ticket status (shown when an MR is expanded). Jira-only for now:
+	// needs tickets.status: jira + tickets.jiraBaseURL in config and JIRA_EMAIL/
+	// JIRA_API_TOKEN in the env. Absent → feature off; open-in-browser (J) still
+	// works via tickets.urlTemplate.
+	if cfg.Tickets.Status == "jira" {
+		if jiraEmail, jiraToken := jira.FromEnv(); jira.Configured(cfg.Tickets.JiraBaseURL, jiraEmail, jiraToken) {
+			m = m.WithJira(jira.HTTPClient{BaseURL: cfg.Tickets.JiraBaseURL, Email: jiraEmail, Token: jiraToken})
+		}
 	}
 	prog := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {

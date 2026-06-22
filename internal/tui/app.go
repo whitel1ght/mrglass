@@ -476,13 +476,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if mr == nil {
 			return m, nil
 		}
-		if m.cfg.Jira.BaseURL == "" {
-			m.status = "⚠ set jira.baseURL in config to open tickets"
+		if m.cfg.Tickets.URLTemplate == "" {
+			m.status = "⚠ set tickets.urlTemplate in config to open tickets"
 			return m, nil
 		}
-		url := core.TicketURL(m.cfg.Jira.BaseURL, mr.TicketKey)
+		url := core.TicketURL(m.cfg.Tickets.URLTemplate, mr.TicketKey)
 		if url == "" {
-			m.status = "no Jira ticket on this MR"
+			m.status = "no ticket on this MR"
 			return m, nil
 		}
 		m.status = "opening " + mr.TicketKey + "…"

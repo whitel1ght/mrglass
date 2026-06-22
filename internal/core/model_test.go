@@ -55,18 +55,21 @@ func TestApproved(t *testing.T) {
 
 func TestTicketURL(t *testing.T) {
 	cases := []struct {
-		base, key, want string
+		tmpl, key, want string
 	}{
-		{"https://ecfx.atlassian.net", "ECFX-1234", "https://ecfx.atlassian.net/browse/ECFX-1234"},
-		{"https://ecfx.atlassian.net/", "ECFX-1", "https://ecfx.atlassian.net/browse/ECFX-1"}, // trailing slash trimmed
-		{"https://jira.company.com", "ABC-9", "https://jira.company.com/browse/ABC-9"},          // self-hosted
-		{"", "ECFX-1", ""},      // no base URL -> nothing
-		{"https://x", "", ""},    // no key -> nothing
-		{"https://x", "Other", ""}, // "Other" = no ticket
+		// Jira
+		{"https://ecfxdev.atlassian.net/browse/{key}", "ECFX-9340", "https://ecfxdev.atlassian.net/browse/ECFX-9340"},
+		// Linear — proves the template is tracker-agnostic
+		{"https://linear.app/acme/issue/{key}", "ENG-12", "https://linear.app/acme/issue/ENG-12"},
+		// GitHub issues
+		{"https://github.com/acme/repo/issues/{key}", "42", "https://github.com/acme/repo/issues/42"},
+		{"", "ECFX-1", ""},                                // no template -> nothing
+		{"https://x/browse/{key}", "", ""},                // no key -> nothing
+		{"https://x/browse/{key}", "Other", ""},           // "Other" = no ticket
 	}
 	for _, c := range cases {
-		if got := TicketURL(c.base, c.key); got != c.want {
-			t.Errorf("TicketURL(%q,%q) = %q, want %q", c.base, c.key, got, c.want)
+		if got := TicketURL(c.tmpl, c.key); got != c.want {
+			t.Errorf("TicketURL(%q,%q) = %q, want %q", c.tmpl, c.key, got, c.want)
 		}
 	}
 }

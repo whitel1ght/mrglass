@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -69,17 +70,40 @@ type Config struct {
 	// ProjectPaths overrides the clone location per MR project path
 	// (e.g. "group/repo": "/abs/path"). Takes precedence over ProjectsDir.
 	ProjectPaths map[string]string `yaml:"projectPaths"`
-	// Jira holds Jira integration settings.
+	// Forge selects the code host: "gitlab" (via glab) or "github" (via gh).
+	Forge string `yaml:"forge"`
+	// Tickets configures the issue tracker integration.
+	Tickets TicketsConfig `yaml:"tickets"`
+
+	// Jira is the legacy Jira config; superseded by Tickets. Kept so existing
+	// configs migrate (see migrateLegacyJira). Do not use in new configs.
 	Jira JiraConfig `yaml:"jira"`
 }
 
-// JiraConfig configures Jira integration. v1 only opens tickets in the browser,
-// which needs just the base URL (no auth).
+// TicketsConfig configures the issue tracker. Open-in-browser works for ANY
+// tracker via URLTemplate; inline status is Jira-only for now.
+type TicketsConfig struct {
+	// URLTemplate builds the ticket URL; "{key}" is replaced with the ticket key.
+	// Tracker-agnostic, e.g. "https://acme.atlassian.net/browse/{key}" or
+	// "https://linear.app/acme/issue/{key}". Empty disables open-in-browser.
+	URLTemplate string `yaml:"urlTemplate"`
+	// Status selects the inline-status backend: "jira" or "none" (default).
+	Status string `yaml:"status"`
+	// JiraBaseURL is the Jira site root used for inline status when Status=="jira"
+	// (needs JIRA_EMAIL/JIRA_API_TOKEN in the env).
+	JiraBaseURL string `yaml:"jiraBaseURL"`
+}
+
+// JiraConfig is the legacy Jira section (pre-Tickets). Retained for migration.
 type JiraConfig struct {
-	// BaseURL is the Jira site root, e.g. "https://ecfx.atlassian.net" (Cloud) or
-	// "https://jira.company.com" (Data Center). Used to build <baseURL>/browse/<KEY>.
 	BaseURL string `yaml:"baseURL"`
 }
+
+// ForgeGitLab / ForgeGitHub are the supported forge values.
+const (
+	ForgeGitLab = "gitlab"
+	ForgeGitHub = "github"
+)
 
 // DefaultReviewPrompt is the built-in MR-review instruction.
 const DefaultReviewPrompt = "You are reviewing a GitLab merge request. " +
@@ -95,6 +119,7 @@ func Default() Config {
 		RefreshMinutes: 5,
 		AutoTriage:     true,
 		Theme:          "tokyonight",
+		Forge:          ForgeGitLab,
 		ReviewPrompt:   DefaultReviewPrompt,
 		Sections: []SectionConfig{
 			{Title: "Needs My Review", Filter: `role == "review_requested" && !draft`},
@@ -141,5 +166,38 @@ func Load(path string) (Config, []string) {
 		warns = append(warns, fmt.Sprintf("config %s is invalid: %v; using defaults", path, err))
 		return Default(), warns
 	}
+	warns = append(warns, cfg.normalize()...)
 	return cfg, warns
+}
+
+// normalize applies defaults/migrations after unmarshal. Returns any warnings.
+func (c *Config) normalize() []string {
+	var warns []string
+
+	// Forge: default + validate.
+	switch c.Forge {
+	case "":
+		c.Forge = ForgeGitLab
+	case ForgeGitLab, ForgeGitHub:
+		// ok
+	default:
+		warns = append(warns, fmt.Sprintf("unknown forge %q; falling back to %q", c.Forge, ForgeGitLab))
+		c.Forge = ForgeGitLab
+	}
+
+	// Migrate legacy jira.baseURL → tickets.* when tickets isn't configured.
+	if c.Jira.BaseURL != "" && c.Tickets.URLTemplate == "" {
+		base := strings.TrimRight(c.Jira.BaseURL, "/")
+		c.Tickets.URLTemplate = base + "/browse/{key}"
+		if c.Tickets.JiraBaseURL == "" {
+			c.Tickets.JiraBaseURL = base
+		}
+		if c.Tickets.Status == "" {
+			c.Tickets.Status = "jira"
+		}
+		warns = append(warns, "config: jira.baseURL is deprecated — migrated to tickets.urlTemplate; "+
+			"please update your config")
+	}
+	c.Jira = JiraConfig{} // clear legacy so nothing else reads it
+	return warns
 }
