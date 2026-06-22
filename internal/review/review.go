@@ -230,19 +230,23 @@ func (cr ClaudeReviewer) reviewWithSkill(req ReviewReq) Result {
 	var instr string
 	if req.Dir != "" {
 		// Running inside the project worktree → let the skill drive: point it at
-		// the MR and let it investigate the repo itself.
+		// the MR and let it investigate the repo itself. The skill is MANDATORY —
+		// do not let Claude decide the MR is "too small" and skip it.
 		instr = fmt.Sprintf(
-			"Use the Skill tool to invoke the %q skill and review GitLab merge request "+
-				"!%d in project %s. You are running inside a checkout of that repo at the "+
-				"MR's revision — investigate fully (read the diff, prior review comments, "+
-				"README, CI config, git history, and any sibling/related files the skill "+
-				"directs). %s\n\nReviewer guidance: %s",
+			"FIRST ACTION, MANDATORY: call the Skill tool with skill %q. This is "+
+				"required regardless of how small or low-risk the change looks — do NOT "+
+				"decide it's unnecessary and write an ad-hoc review instead. After the "+
+				"skill loads, follow it to review GitLab merge request !%d in project %s. "+
+				"You are inside a checkout of that repo at the MR's revision — investigate "+
+				"fully (diff, prior review comments, README, CI config, git history, "+
+				"sibling files the skill directs). %s\n\nReviewer guidance: %s",
 			req.Skill, req.MR.IID, proj, draftOnlyGuard, req.Prompt)
 	} else {
 		// No local checkout → fall back to handing the skill the fetched diff.
 		instr = fmt.Sprintf(
-			"Use the Skill tool to invoke the %q skill, then apply it to review this "+
-				"merge request. %s\n\n%s",
+			"FIRST ACTION, MANDATORY: call the Skill tool with skill %q (required "+
+				"regardless of how small the change looks — do NOT skip it and write an "+
+				"ad-hoc review). Then apply it to review this merge request. %s\n\n%s",
 			req.Skill, draftOnlyGuard, reviewPrompt(req.Prompt, req.MR, req.Diff))
 	}
 	args := []string{
