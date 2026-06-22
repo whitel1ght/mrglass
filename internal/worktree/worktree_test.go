@@ -147,3 +147,17 @@ func TestLaunchRunsArgv(t *testing.T) {
 		t.Errorf("launched argv = %v", fr.argv)
 	}
 }
+
+func TestBuildArgsSessionPlaceholder(t *testing.T) {
+	// {session} resolves (empty outside tmux, real name inside) and substitutes.
+	argv, err := BuildArgs("tmux new-window -t {session}: -c {dir} {cmd}", "/wt", "claude", "b", "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the -t arg should be "<session>:" — empty session yields ":" which tmux
+	// treats as the current session; non-empty yields "name:".
+	joined := strings.Join(argv, " ")
+	if !strings.Contains(joined, "new-window -t") || !strings.Contains(joined, "-c /wt claude") {
+		t.Errorf("session template not built right: %v", argv)
+	}
+}

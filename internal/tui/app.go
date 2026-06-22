@@ -422,8 +422,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case worktreeMsg:
 		if msg.err != nil {
-			m.status = "⚠ open worktree failed: " + msg.err.Error()
+			review.Logf("worktree %s FAILED: %v", msg.slug, msg.err)
+			m.status = "⚠ open worktree failed: " + msg.err.Error() + "  (log: " + review.LogPath() + ")"
 		} else {
+			review.Logf("worktree %s OK on %s", msg.slug, msg.branch)
 			m.status = "opened " + msg.slug + " on " + msg.branch
 		}
 		return m, nil

@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -28,13 +29,16 @@ func (ExecRunner) Start(argv []string) error {
 }
 
 // BuildArgs renders the openCommand template and splits it into argv. Placeholders
-// {dir} {cmd} {branch} {key} are replaced first, then the result is tokenized
-// (shell-style, honoring quotes). Returns an error for an empty template or
-// unbalanced quotes.
+// {dir} {cmd} {branch} {key} {session} are replaced first, then the result is
+// tokenized (shell-style, honoring quotes). {session} is the current tmux session
+// (empty outside tmux) so a `tmux new-window -t {session}:` template lands the
+// window in the session you're attached to. Returns an error for an empty
+// template or unbalanced quotes.
 func BuildArgs(openCommand, dir, workCmd, branch, key string) ([]string, error) {
 	if strings.TrimSpace(openCommand) == "" {
 		return nil, fmt.Errorf("empty openCommand")
 	}
+	session := currentTmuxSession()
 	// Expand {dir}/{branch}/{key} inside workCmd first, so a workCmd like
 	// `claude "address {key}"` gets its own placeholders filled before it is
 	// substituted as {cmd} and the whole thing is tokenized.
@@ -45,6 +49,7 @@ func BuildArgs(openCommand, dir, workCmd, branch, key string) ([]string, error) 
 		"{cmd}", cmd,
 		"{branch}", branch,
 		"{key}", key,
+		"{session}", session,
 	).Replace(openCommand)
 	argv, err := tokenize(full)
 	if err != nil {
@@ -54,6 +59,21 @@ func BuildArgs(openCommand, dir, workCmd, branch, key string) ([]string, error) 
 		return nil, fmt.Errorf("openCommand produced no command")
 	}
 	return argv, nil
+}
+
+// currentTmuxSession returns the name of the tmux session mrglass is running in,
+// or "" if not in tmux / tmux can't be queried. Used to fill {session} so a
+// new-window template targets the session you're actually looking at (tmux's
+// session resolution is otherwise ambiguous when several sessions exist).
+func currentTmuxSession() string {
+	if os.Getenv("TMUX") == "" {
+		return ""
+	}
+	out, err := exec.Command("tmux", "display-message", "-p", "#S").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // Launch renders the template and starts the command detached.

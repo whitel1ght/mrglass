@@ -47,7 +47,7 @@ projectsDir: ~/projects
 # main clone is untouched) under <clone>/../.mrglass-worktrees/, then runs
 # openCommand. Placeholders mrglass fills: {dir} (worktree path), {cmd} (workCmd
 # below), {branch}, {key}. Empty openCommand disables w. Examples:
-#   tmux new window:    tmux new-window -c {dir} {cmd}
+#   tmux new window:    tmux new-window -t {session}: -c {dir} {cmd}
 #   tmux new session:   tmux new-session -d -s {key} -c {dir} {cmd}
 #   iTerm2 new tab:     osascript -e 'tell application "iTerm2" to tell current window to create tab with default profile command "cd {dir} && {cmd}"'
 #   macOS Terminal:     osascript -e 'tell application "Terminal" to do script "cd {dir} && {cmd}"'
