@@ -75,14 +75,20 @@ func Approved(approvedBy []string, required int) bool {
 	return len(approvedBy) > 0
 }
 
-// TicketURL builds the Jira permalink (<baseURL>/browse/<KEY>) for a ticket key.
-// It returns "" when baseURL is empty or the key is empty or "Other" (i.e. the
-// MR has no associated ticket), so callers can treat "" as "nothing to open".
-func TicketURL(baseURL, key string) string {
-	if baseURL == "" || key == "" || key == "Other" {
+// TicketURL renders a ticket key into a URL template by replacing "{key}".
+// The template is tracker-agnostic, e.g.:
+//
+//	https://acme.atlassian.net/browse/{key}     (Jira)
+//	https://linear.app/acme/issue/{key}         (Linear)
+//	https://github.com/acme/repo/issues/{key}   (GitHub issues)
+//
+// Returns "" when the template is empty or the key is empty/"Other" (no ticket),
+// so callers can treat "" as "nothing to open".
+func TicketURL(urlTemplate, key string) string {
+	if urlTemplate == "" || key == "" || key == "Other" {
 		return ""
 	}
-	return strings.TrimRight(baseURL, "/") + "/browse/" + key
+	return strings.ReplaceAll(urlTemplate, "{key}", key)
 }
 
 // ParseTicket extracts a ticket key from the title, then the branch, upper-cased.

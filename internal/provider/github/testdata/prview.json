@@ -1,0 +1,24 @@
+{
+  "number": 123,
+  "headRefName": "feature/ABC-1234-widget",
+  "baseRefName": "main",
+  "isDraft": false,
+  "mergeable": "CONFLICTING",
+  "mergeStateStatus": "DIRTY",
+  "reviewDecision": "APPROVED",
+  "latestReviews": [
+    { "author": { "login": "alice" }, "state": "APPROVED" },
+    { "author": { "login": "bob" }, "state": "COMMENTED" }
+  ],
+  "statusCheckRollup": [
+    { "conclusion": "SUCCESS", "status": "COMPLETED" },
+    { "conclusion": "FAILURE", "status": "COMPLETED" }
+  ],
+  "assignees": [
+    { "login": "you" }
+  ],
+  "reviewRequests": [
+    { "login": "carol" },
+    { "login": "you" }
+  ]
+}

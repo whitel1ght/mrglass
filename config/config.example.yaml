@@ -5,6 +5,10 @@ refreshMinutes: 5          # 0 disables auto-refresh
 autoTriage: true
 theme: tokyonight        # tokyonight | default | dracula
 
+# Code host: gitlab (via glab) or github (via gh). The matching CLI must be
+# installed and authenticated.
+forge: gitlab
+
 # Instruction for the on-demand Claude MR review (the `c` hotkey). The MR diff is
 # appended automatically. Claude runs read-only; the generated review is shown for
 # your confirmation before it's posted to the MR as a comment.
@@ -38,16 +42,22 @@ projectsDir: ~/projects
 # projectPaths:
 #   ecfx/ecfx-dashboard: ~/work/dashboard
 
-# Jira: press J on a selected MR to open its ticket (e.g. ECFX-1234) in the
-# browser at <baseURL>/browse/<KEY>. Just set the base URL — no token needed for J.
-#
-# Inline ticket status (shown when you expand an MR with `enter`) additionally
-# needs Jira API credentials in the ENVIRONMENT (kept out of this file):
-#   export JIRA_EMAIL=you@company.com
-#   export JIRA_API_TOKEN=<token from id.atlassian.com/manage-profile/security/api-tokens>
-# Absent → inline status is off, but J (open-in-browser) still works.
-jira:
-  baseURL: ""   # e.g. https://ecfx.atlassian.net  (or your self-hosted Jira host)
+# Issue tracker (works with ANY tracker for open-in-browser).
+tickets:
+  # Press J on a selected MR to open its ticket. {key} is replaced with the key
+  # (e.g. ECFX-1234). Works for any tracker — just set the right URL shape:
+  #   Jira:   https://ecfxdev.atlassian.net/browse/{key}
+  #   Linear: https://linear.app/acme/issue/{key}
+  #   GitHub: https://github.com/acme/repo/issues/{key}
+  urlTemplate: ""   # empty disables J
+
+  # Inline ticket status when you expand an MR (enter). Jira only for now.
+  status: none      # none | jira
+  # For status: jira — the Jira site root, plus JIRA_EMAIL/JIRA_API_TOKEN in the
+  # ENVIRONMENT (kept out of this file):
+  #   export JIRA_EMAIL=you@company.com
+  #   export JIRA_API_TOKEN=<token from id.atlassian.com/manage-profile/security/api-tokens>
+  jiraBaseURL: ""   # e.g. https://ecfxdev.atlassian.net
 
 sections:
   - title: "Needs My Review"

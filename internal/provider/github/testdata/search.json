@@ -1,0 +1,24 @@
+[
+  {
+    "number": 123,
+    "title": "Fix ABC-1234 the widget crash",
+    "url": "https://github.com/owner/repo/pull/123",
+    "repository": { "nameWithOwner": "owner/repo" },
+    "author": { "login": "you" },
+    "isDraft": false,
+    "commentsCount": 4,
+    "createdAt": "2026-06-18T10:00:00Z",
+    "updatedAt": "2026-06-20T12:00:00Z"
+  },
+  {
+    "number": 99,
+    "title": "Unrelated old change",
+    "url": "https://github.com/owner/repo/pull/99",
+    "repository": { "nameWithOwner": "owner/repo" },
+    "author": { "login": "carol" },
+    "isDraft": true,
+    "commentsCount": 0,
+    "createdAt": "2025-01-01T10:00:00Z",
+    "updatedAt": "2025-01-02T12:00:00Z"
+  }
+]
