@@ -196,7 +196,7 @@ func TestClaudeReviewerWithSkillUsesStreamAndReports(t *testing.T) {
 		t.Errorf("prompt should instruct invoking the skill: %q", f.in)
 	}
 	// guard: forbids the WRITE/post, but must still permit read-only investigation
-	if !strings.Contains(f.in, "POSTING RULE") || !strings.Contains(f.in, "do NOT WRITE") {
+	if !strings.Contains(f.in, "POSTING RULE") || !strings.Contains(f.in, "NO write action") {
 		t.Errorf("skill prompt should carry the post-only guard: %q", f.in)
 	}
 }

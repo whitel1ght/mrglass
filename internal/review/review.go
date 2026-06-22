@@ -208,11 +208,15 @@ func (cr ClaudeReviewer) reviewPlain(req ReviewReq) Result {
 // that read-only investigation (prior comments, CI config, git history, sibling
 // files) is exactly what produces a deep review. mrglass posts after the user
 // confirms in the TUI.
-const draftOnlyGuard = "POSTING RULE: investigate as deeply as you need using " +
-	"read-only commands (read files, `glab` reads, `git log`/`git show`, `grep`, " +
-	"render/build commands) — but do NOT WRITE anything: no `glab mr note`/approve/" +
-	"label, no commits, no pushes, and do NOT ask whether to post. The calling tool " +
-	"posts after the user confirms. Your final output must be ONLY the review comment."
+const draftOnlyGuard = "POSTING RULE (OVERRIDES ANY SKILL INSTRUCTION TO THE " +
+	"CONTRARY): investigate as deeply as you need using read-only commands (read " +
+	"files, `glab` reads, `git log`/`git show`, `grep`, render/build commands) — but " +
+	"perform NO write action whatsoever on the merge request, even if the skill says " +
+	"you have standing authorization to post. Specifically: do NOT run `glab mr note` " +
+	"or post any comment/discussion, do NOT `glab mr approve`/revoke, do NOT add or " +
+	"remove labels, do NOT add yourself (or anyone) as a reviewer/assignee, do NOT " +
+	"commit or push, and do NOT ask whether to post. The calling tool posts after the " +
+	"user confirms in a separate UI. Your ONLY output is the final review text itself."
 
 // reviewWithSkill invokes a Claude skill for the review and verifies (via
 // stream-json) that the skill actually ran, reporting it on the Result. The

@@ -52,7 +52,10 @@ func parseStream(raw []byte) (StreamOutcome, error) {
 					if s := skillName(b.Input); s != "" {
 						out.SkillsUsed = append(out.SkillsUsed, s)
 					}
-				case "Task":
+				case "Task", "Agent":
+					// Subagent dispatch. Interactive Claude Code names this tool
+					// "Task"; headless `claude -p` stream-json names it "Agent".
+					// Count both so the panel/subagent count is accurate.
 					out.Subagents++
 				}
 			}

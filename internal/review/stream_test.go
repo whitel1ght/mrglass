@@ -26,6 +26,21 @@ func TestParseStreamSkillAndSubagents(t *testing.T) {
 	}
 }
 
+func TestParseStreamCountsAgentAsSubagent(t *testing.T) {
+	// Headless `claude -p` names the subagent-dispatch tool "Agent" (interactive
+	// names it "Task"). Both must count toward Subagents.
+	stream := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Agent","input":{"description":"security review"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Task","input":{"description":"perf review"}}]}}
+{"type":"result","is_error":false,"result":"done"}`
+	out, err := parseStream([]byte(stream))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Subagents != 2 {
+		t.Errorf("Subagents = %d, want 2 (Agent + Task)", out.Subagents)
+	}
+}
+
 func TestParseStreamNoSkill(t *testing.T) {
 	stream := `{"type":"assistant","message":{"content":[{"type":"text","text":"thinking"}]}}
 {"type":"result","is_error":false,"result":"a plain review"}`
