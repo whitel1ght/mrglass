@@ -490,3 +490,61 @@ func TestSkillFiredEntersConfirm(t *testing.T) {
 		t.Error("when the skill fired, the review should enter the confirm flow")
 	}
 }
+
+// flakyGL fails PostNote the first N times, then succeeds — to test retry.
+type flakyGL struct {
+	failsLeft  int
+	postCalled int
+}
+
+func (flakyGL) MRDiff(int, int) (string, error) { return "a diff", nil }
+func (f *flakyGL) PostNote(_, _ int, body string) error {
+	f.postCalled++
+	if f.failsLeft > 0 {
+		f.failsLeft--
+		return fmt.Errorf("transient: connection reset")
+	}
+	return nil
+}
+
+func TestPostFailureKeepsReviewForRetry(t *testing.T) {
+	gl := &flakyGL{failsLeft: 1}
+	m := newTestModel().WithReview(fakeReviewer{text: "the review"}, gl)
+	m.cfg.ReviewSkill = "" // no skill so the result path enters confirm directly
+	m.width, m.height = 100, 30
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m, _ = update(m, reviewMsg(review.Result{Ref: "g/p!1", Text: "the review"}))
+	if m.pendingReview == nil {
+		t.Fatal("should be in confirm state")
+	}
+
+	// First y -> post fails -> review MUST be kept for retry, status says retry
+	m, cmd := update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	if cmd != nil {
+		cmd() // run the (failing) post
+	}
+	m, _ = update(m, postResultMsg{ref: "g/p!1", err: fmt.Errorf("transient: connection reset")})
+	if m.pendingReview == nil {
+		t.Error("a failed post must KEEP the pending review for retry")
+	}
+	if !strings.Contains(m.status, "retry") {
+		t.Errorf("status should offer retry, got %q", m.status)
+	}
+
+	// Second y -> post succeeds -> review cleared, success status
+	m, cmd = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	if cmd != nil {
+		cmd()
+	}
+	m, _ = update(m, postResultMsg{ref: "g/p!1", err: nil})
+	if m.pendingReview != nil {
+		t.Error("a successful post should clear the pending review")
+	}
+	if !strings.Contains(m.status, "posted") {
+		t.Errorf("status should confirm posted, got %q", m.status)
+	}
+}

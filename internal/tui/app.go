@@ -224,16 +224,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case postResultMsg:
-		m.pendingReview = nil
 		if msg.err != nil {
-			// The status bar truncates; log the full post error so it's readable.
+			// Keep the pending review so the user can simply re-press y to retry
+			// (likely a transient API blip). We don't auto-retry a POST: if the
+			// failed attempt actually landed, a blind retry would duplicate the
+			// comment. The full error goes to the log (the status bar truncates).
 			review.Logf("post %s FAILED: %v", msg.ref, msg.err)
-			m.status = "⚠ could not post comment: " + msg.err.Error() +
-				"  (full error: " + review.LogPath() + ")"
-		} else {
-			review.Logf("post %s OK", msg.ref)
-			m.status = "✓ review posted to " + msg.ref
+			m.status = "⚠ post failed (transient?) — [y] retry · [n]/esc discard · log: " + review.LogPath()
+			return m, nil
 		}
+		m.pendingReview = nil
+		review.Logf("post %s OK", msg.ref)
+		m.status = "✓ review posted to " + msg.ref
 		return m, nil
 
 	case fetchResultMsg:
