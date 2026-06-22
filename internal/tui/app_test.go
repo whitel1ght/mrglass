@@ -733,3 +733,36 @@ func TestNoJiraNoteWhenStatusNotRequested(t *testing.T) {
 		t.Errorf("no ticket line when status not requested:\n%s", m.View())
 	}
 }
+
+func TestOpenWorkNoOpenCommand(t *testing.T) {
+	m := newTestModel()
+	m.cfg.Worktree.OpenCommand = "" // not configured
+	m.width, m.height = 100, 30
+	item := jiraMR()
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	u2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+	if cmd != nil {
+		t.Error("w with no openCommand should not run anything")
+	}
+	if !strings.Contains(u2.(Model).status, "worktree.openCommand") {
+		t.Errorf("status should prompt to configure openCommand, got %q", u2.(Model).status)
+	}
+}
+
+func TestOpenWorkNoLocalClone(t *testing.T) {
+	m := newTestModel()
+	m.cfg.Worktree.OpenCommand = "tmux new-window -c {dir} {cmd}"
+	m.cfg.ProjectsDir = t.TempDir() // exists but has no matching clone
+	m.width, m.height = 100, 30
+	item := jiraMR()
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	u2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+	if cmd != nil {
+		t.Error("w with no local clone should not run anything")
+	}
+	if !strings.Contains(u2.(Model).status, "no local clone") {
+		t.Errorf("status should note no local clone, got %q", u2.(Model).status)
+	}
+}
