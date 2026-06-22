@@ -157,10 +157,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		// Keep the review viewport sized to the window if one is open.
+		// Keep the review viewport sized to the window if one is open, and
+		// re-wrap its content to the new width.
 		if m.pendingReview != nil {
 			m.reviewVP.Width = m.reviewWidth()
 			m.reviewVP.Height = m.reviewBodyHeight()
+			m.setReviewContent(m.pendingReview.text)
 		}
 		return m, nil
 
@@ -192,10 +194,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.pendingReview = &pending{ref: res.Ref, mr: *mr, text: res.Text}
 		// Load the full review into a scrollable viewport so structured sections
-		// (Blockers/Observations/…) past the first screen aren't truncated.
-		vp := viewport.New(m.reviewWidth(), m.reviewBodyHeight())
-		vp.SetContent(m.styles.Base.Render(res.Text))
-		m.reviewVP = vp
+		// (Blockers/Observations/…) past the first screen aren't truncated. The
+		// content is word-wrapped to the viewport width — long lines wrap to the
+		// next line rather than being clipped at the right edge.
+		m.reviewVP = viewport.New(m.reviewWidth(), m.reviewBodyHeight())
+		m.setReviewContent(res.Text)
 		ctxNote := "diff-only"
 		if res.LocalContext {
 			ctxNote = "full project context"
@@ -423,6 +426,14 @@ func openURL(url string) tea.Cmd {
 		go func() { _ = cmd.Wait() }()
 		return nil
 	}
+}
+
+// setReviewContent word-wraps the review to the viewport width and loads it.
+// lipgloss .Width(w) hard-wraps long lines to the next line so nothing is
+// clipped at the right edge; the viewport then handles vertical scrolling.
+func (m *Model) setReviewContent(text string) {
+	wrapped := m.styles.Base.Width(m.reviewVP.Width).Render(text)
+	m.reviewVP.SetContent(wrapped)
 }
 
 // reviewWidth/reviewBodyHeight size the scrollable review viewport, leaving room

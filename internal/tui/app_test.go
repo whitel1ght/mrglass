@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -419,5 +420,34 @@ func TestScrollKeyDoesNotPostOrDiscard(t *testing.T) {
 	}
 	if gl.postCalled {
 		t.Error("'j' must never post")
+	}
+}
+
+func TestReviewContentWrapsNotClipped(t *testing.T) {
+	gl := &fakeReviewGL{}
+	// one very long line, far wider than the terminal
+	long := "## Important\n" + strings.Repeat("verylongwordsegment ", 40) + "\nend marker"
+	m := newTestModel().WithReview(fakeReviewer{text: long}, gl)
+	m.width, m.height = 60, 40 // narrow so wrapping is forced, tall so it all fits
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m, _ = update(m, reviewMsg(review.Result{Ref: "g/p!1", Text: long}))
+
+	// Check the scrollable review body specifically (not the fixed footer): no
+	// content line may exceed the viewport width — it must wrap, not clip.
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	for _, ln := range strings.Split(m.reviewVP.View(), "\n") {
+		clean := ansi.ReplaceAllString(ln, "")
+		if len([]rune(clean)) > m.reviewVP.Width {
+			t.Errorf("review line exceeds viewport width %d (not wrapped): %q", m.reviewVP.Width, clean)
+		}
+	}
+	// and the long content must still be present (wrapped, not dropped)
+	full := ansi.ReplaceAllString(m.reviewVP.View(), "")
+	if !strings.Contains(full, "verylongwordsegment") {
+		t.Errorf("wrapped content should be visible: %q", full)
 	}
 }
