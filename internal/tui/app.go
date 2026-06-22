@@ -185,6 +185,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "⚠ review failed: " + res.Err.Error() + "  (full log: " + review.LogPath() + ")"
 			return m, nil
 		}
+		// A configured review skill that did NOT actually fire means the run
+		// degraded to an ad-hoc review (the skill flaked / Claude opted out).
+		// Don't silently present that fallback — treat it as a failure the user
+		// can retry, so they never unknowingly post a basic review instead of
+		// the team's panel review.
+		if m.cfg.ReviewSkill != "" && len(res.SkillsUsed) == 0 {
+			m.status = "⚠ " + m.cfg.ReviewSkill + " did not run (likely transient) — press c to retry"
+			return m, nil
+		}
 		// Stash the generated review and enter the confirm state; nothing is
 		// posted until the user says yes.
 		mr := m.byRef(res.Ref)

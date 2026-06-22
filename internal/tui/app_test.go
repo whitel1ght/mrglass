@@ -451,3 +451,42 @@ func TestReviewContentWrapsNotClipped(t *testing.T) {
 		t.Errorf("wrapped content should be visible: %q", full)
 	}
 }
+
+func TestSkillNotFiredDoesNotEnterConfirm(t *testing.T) {
+	// reviewSkill is set (default config has it? no — set it explicitly).
+	gl := &fakeReviewGL{}
+	m := newTestModel().WithReview(fakeReviewer{text: "flat ad-hoc review"}, gl)
+	m.cfg.ReviewSkill = "claude-components:mr-review-multi-agent"
+	m.width, m.height = 100, 30
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	// result arrives WITHOUT a skill having fired (SkillsUsed empty)
+	m, _ = update(m, reviewMsg(review.Result{Ref: "g/p!1", Text: "flat ad-hoc review"}))
+	if m.pendingReview != nil {
+		t.Error("a configured skill that didn't fire must NOT enter the confirm/post flow")
+	}
+	if !strings.Contains(m.status, "did not run") {
+		t.Errorf("status should flag the skill didn't run + retry, got %q", m.status)
+	}
+}
+
+func TestSkillFiredEntersConfirm(t *testing.T) {
+	// sanity: when the skill DID fire, the flow proceeds normally.
+	gl := &fakeReviewGL{}
+	m := newTestModel().WithReview(fakeReviewer{text: "structured review"}, gl)
+	m.cfg.ReviewSkill = "claude-components:mr-review-multi-agent"
+	m.width, m.height = 100, 30
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m, _ = update(m, reviewMsg(review.Result{Ref: "g/p!1", Text: "structured review",
+		SkillsUsed: []string{"claude-components:mr-review-multi-agent"}}))
+	if m.pendingReview == nil {
+		t.Error("when the skill fired, the review should enter the confirm flow")
+	}
+}
