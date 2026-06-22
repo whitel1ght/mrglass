@@ -2,7 +2,7 @@
 // uniform interface returning core.MR values.
 package provider
 
-import "github.com/dmitry/mrglass/internal/core"
+import "github.com/whitel1ght/mrglass/internal/core"
 
 // Provider fetches merge/pull requests from a forge for the current user.
 type Provider interface {

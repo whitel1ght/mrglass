@@ -58,12 +58,12 @@ func TestTicketURL(t *testing.T) {
 		tmpl, key, want string
 	}{
 		// Jira
-		{"https://ecfxdev.atlassian.net/browse/{key}", "ECFX-9340", "https://ecfxdev.atlassian.net/browse/ECFX-9340"},
+		{"https://acme.atlassian.net/browse/{key}", "PROJ-9340", "https://acme.atlassian.net/browse/PROJ-9340"},
 		// Linear — proves the template is tracker-agnostic
 		{"https://linear.app/acme/issue/{key}", "ENG-12", "https://linear.app/acme/issue/ENG-12"},
 		// GitHub issues
 		{"https://github.com/acme/repo/issues/{key}", "42", "https://github.com/acme/repo/issues/42"},
-		{"", "ECFX-1", ""},                                // no template -> nothing
+		{"", "PROJ-1", ""},                                // no template -> nothing
 		{"https://x/browse/{key}", "", ""},                // no key -> nothing
 		{"https://x/browse/{key}", "Other", ""},           // "Other" = no ticket
 	}

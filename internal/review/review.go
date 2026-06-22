@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dmitry/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/core"
 )
 
 // maxDiffChars caps how much diff we feed Claude, so a huge MR doesn't blow the

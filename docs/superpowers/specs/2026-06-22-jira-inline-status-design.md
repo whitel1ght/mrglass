@@ -17,9 +17,9 @@ detail, fetched lazily from the Jira REST API and cached. Builds on Phase 1
   ticket isn't cached, fire one async fetch. Cache per ticket key with a TTL so
   re-expanding / tab-switching doesn't refetch.
 - **Display**: in the expanded detail, a line
-  `🎫 ECFX-1234 · In Review · Jane Smith` colored by status **category**
+  `🎫 PROJ-1234 · In Review · Jane Smith` colored by status **category**
   (To Do→subtle, In Progress→accent, Done→green), plus the summary on the next
-  line. While fetching: `🎫 ECFX-1234 · loading…`. On error: `🎫 ECFX-1234 ·
+  line. While fetching: `🎫 PROJ-1234 · loading…`. On error: `🎫 PROJ-1234 ·
   (status unavailable)` — never blocks the rest of the detail.
 
 ## API
@@ -32,7 +32,7 @@ Accept: application/json
 ```
 Response (trimmed):
 ```json
-{ "key": "ECFX-1234",
+{ "key": "PROJ-1234",
   "fields": {
     "summary": "Inject PROCESSOR_LOGGING_BUCKET",
     "status":   { "name": "In Review", "statusCategory": { "key": "indeterminate" } },

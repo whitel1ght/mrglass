@@ -40,7 +40,7 @@ reviewPrompt: >
 projectsDir: ~/projects
 # Per-project overrides for odd layouts/names (key = MR's "group/repo"):
 # projectPaths:
-#   ecfx/ecfx-dashboard: ~/work/dashboard
+#   acme/web: ~/work/dashboard
 
 # Press w on a selected MR to open its branch in a terminal, ready to work on it.
 # mrglass checks the MR branch out in a dedicated, persistent git worktree (your
@@ -61,8 +61,8 @@ worktree:
 # Issue tracker (works with ANY tracker for open-in-browser).
 tickets:
   # Press J on a selected MR to open its ticket. {key} is replaced with the key
-  # (e.g. ECFX-1234). Works for any tracker — just set the right URL shape:
-  #   Jira:   https://ecfxdev.atlassian.net/browse/{key}
+  # (e.g. PROJ-1234). Works for any tracker — just set the right URL shape:
+  #   Jira:   https://acme.atlassian.net/browse/{key}
   #   Linear: https://linear.app/acme/issue/{key}
   #   GitHub: https://github.com/acme/repo/issues/{key}
   urlTemplate: ""   # empty disables J
@@ -73,7 +73,7 @@ tickets:
   # ENVIRONMENT (kept out of this file):
   #   export JIRA_EMAIL=you@company.com
   #   export JIRA_API_TOKEN=<token from id.atlassian.com/manage-profile/security/api-tokens>
-  jiraBaseURL: ""   # e.g. https://ecfxdev.atlassian.net
+  jiraBaseURL: ""   # e.g. https://acme.atlassian.net
 
 sections:
   - title: "Needs My Review"

@@ -15,4 +15,8 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         with: { version: "~> v2", args: release --clean }
         env:
+          # Default token: creates the GitHub Release on this repo.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT with write access to whitel1ght/homebrew-tap, so GoReleaser can
+          # push the generated formula there. Add it in repo Settings → Secrets.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

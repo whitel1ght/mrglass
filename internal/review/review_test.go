@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dmitry/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/core"
 )
 
 type fakeGitLab struct {
@@ -208,12 +208,12 @@ func TestSkillReviewWithWorktreeDrivesItself(t *testing.T) {
 {"type":"result","is_error":false,"result":"deep review"}`
 	f := &fakeCmd{out: []byte(stream)}
 	(ClaudeReviewer{R: f}).Review(ReviewReq{
-		MR: core.MR{Ref: "ecfx/infra/k8s!288", IID: 288, Title: "t"},
+		MR: core.MR{Ref: "acme/infra/api!288", IID: 288, Title: "t"},
 		Diff: "PRE-PASTED DIFF SHOULD NOT APPEAR", Prompt: "p",
 		Skill: "claude-components:mr-review", Dir: "/tmp/wt",
 	})
 	// must point the skill at the MR + project and tell it to investigate
-	if !strings.Contains(f.in, "!288") || !strings.Contains(f.in, "ecfx/infra/k8s") {
+	if !strings.Contains(f.in, "!288") || !strings.Contains(f.in, "acme/infra/api") {
 		t.Errorf("worktree skill prompt should reference the MR + project: %q", f.in)
 	}
 	if !strings.Contains(f.in, "investigate") {

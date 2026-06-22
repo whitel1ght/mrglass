@@ -1,4 +1,4 @@
-module github.com/dmitry/mrglass
+module github.com/whitel1ght/mrglass
 
 go 1.24.2
 

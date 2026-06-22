@@ -3,7 +3,7 @@ package section
 import (
 	"testing"
 
-	"github.com/dmitry/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/core"
 )
 
 func TestMatchRole(t *testing.T) {

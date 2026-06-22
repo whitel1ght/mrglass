@@ -8,14 +8,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/dmitry/mrglass/internal/analyze"
-	"github.com/dmitry/mrglass/internal/config"
-	"github.com/dmitry/mrglass/internal/jira"
-	"github.com/dmitry/mrglass/internal/provider"
-	"github.com/dmitry/mrglass/internal/provider/github"
-	"github.com/dmitry/mrglass/internal/provider/gitlab"
-	"github.com/dmitry/mrglass/internal/review"
-	"github.com/dmitry/mrglass/internal/tui"
+	"github.com/whitel1ght/mrglass/internal/analyze"
+	"github.com/whitel1ght/mrglass/internal/config"
+	"github.com/whitel1ght/mrglass/internal/jira"
+	"github.com/whitel1ght/mrglass/internal/provider"
+	"github.com/whitel1ght/mrglass/internal/provider/github"
+	"github.com/whitel1ght/mrglass/internal/provider/gitlab"
+	"github.com/whitel1ght/mrglass/internal/review"
+	"github.com/whitel1ght/mrglass/internal/tui"
 )
 
 var version = "dev"

@@ -7,12 +7,12 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/dmitry/mrglass/internal/analyze"
-	"github.com/dmitry/mrglass/internal/config"
-	"github.com/dmitry/mrglass/internal/core"
-	jiraPkg "github.com/dmitry/mrglass/internal/jira"
-	"github.com/dmitry/mrglass/internal/review"
-	"github.com/dmitry/mrglass/internal/watch"
+	"github.com/whitel1ght/mrglass/internal/analyze"
+	"github.com/whitel1ght/mrglass/internal/config"
+	"github.com/whitel1ght/mrglass/internal/core"
+	jiraPkg "github.com/whitel1ght/mrglass/internal/jira"
+	"github.com/whitel1ght/mrglass/internal/review"
+	"github.com/whitel1ght/mrglass/internal/watch"
 )
 
 func mr(ref, ci string) core.MR {
@@ -556,7 +556,7 @@ func TestOpenTicketNoBaseURL(t *testing.T) {
 	m.width, m.height = 100, 30
 	item := mr("g/p!1", "success")
 	item.Role = core.RoleReviewRequested
-	item.TicketKey = "ECFX-1234"
+	item.TicketKey = "PROJ-1234"
 	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
 	m = u.(Model)
 	u2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("J")})
@@ -570,7 +570,7 @@ func TestOpenTicketNoBaseURL(t *testing.T) {
 
 func TestOpenTicketNoTicket(t *testing.T) {
 	m := newTestModel()
-	m.cfg.Tickets.URLTemplate = "https://ecfxdev.atlassian.net/browse/{key}"
+	m.cfg.Tickets.URLTemplate = "https://acme.atlassian.net/browse/{key}"
 	m.width, m.height = 100, 30
 	item := mr("g/p!1", "success")
 	item.Role = core.RoleReviewRequested
@@ -588,18 +588,18 @@ func TestOpenTicketNoTicket(t *testing.T) {
 
 func TestOpenTicketOpens(t *testing.T) {
 	m := newTestModel()
-	m.cfg.Tickets.URLTemplate = "https://ecfxdev.atlassian.net/browse/{key}"
+	m.cfg.Tickets.URLTemplate = "https://acme.atlassian.net/browse/{key}"
 	m.width, m.height = 100, 30
 	item := mr("g/p!1", "success")
 	item.Role = core.RoleReviewRequested
-	item.TicketKey = "ECFX-1234"
+	item.TicketKey = "PROJ-1234"
 	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
 	m = u.(Model)
 	u2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("J")})
 	if cmd == nil {
 		t.Error("J with baseURL + ticket should return an open command")
 	}
-	if !strings.Contains(u2.(Model).status, "ECFX-1234") {
+	if !strings.Contains(u2.(Model).status, "PROJ-1234") {
 		t.Errorf("status should note the ticket opening, got %q", u2.(Model).status)
 	}
 }
@@ -621,12 +621,12 @@ func (f *fakeJira) Fetch(key string) (jiraPkg.Ticket, error) {
 func jiraMR() core.MR {
 	m := mr("g/p!1", "success")
 	m.Role = core.RoleReviewRequested
-	m.TicketKey = "ECFX-1234"
+	m.TicketKey = "PROJ-1234"
 	return m
 }
 
 func TestExpandFetchesTicketWhenConfigured(t *testing.T) {
-	fj := &fakeJira{t: jiraPkg.Ticket{Key: "ECFX-1234", Status: "In Review", StatusCategory: "indeterminate", Assignee: "Jane"}}
+	fj := &fakeJira{t: jiraPkg.Ticket{Key: "PROJ-1234", Status: "In Review", StatusCategory: "indeterminate", Assignee: "Jane"}}
 	m := newTestModel().WithJira(fj)
 	m.width, m.height = 100, 30
 	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{jiraMR()}}))
@@ -638,18 +638,18 @@ func TestExpandFetchesTicketWhenConfigured(t *testing.T) {
 		t.Fatal("expanding a ticketed MR with Jira configured should fetch")
 	}
 	cmd() // runs Fetch
-	if fj.calls != 1 || fj.lastKey != "ECFX-1234" {
+	if fj.calls != 1 || fj.lastKey != "PROJ-1234" {
 		t.Errorf("Fetch should be called once with the ticket key, got calls=%d key=%q", fj.calls, fj.lastKey)
 	}
 	// deliver the result and check the detail shows it
-	m3, _ := update(m2, jiraMsg{key: "ECFX-1234", ticket: fj.t})
+	m3, _ := update(m2, jiraMsg{key: "PROJ-1234", ticket: fj.t})
 	if !strings.Contains(m3.View(), "In Review") {
 		t.Errorf("expanded detail should show the ticket status:\n%s", m3.View())
 	}
 }
 
 func TestExpandDoesNotRefetchCachedTicket(t *testing.T) {
-	fj := &fakeJira{t: jiraPkg.Ticket{Key: "ECFX-1234", Status: "Done", StatusCategory: "done"}}
+	fj := &fakeJira{t: jiraPkg.Ticket{Key: "PROJ-1234", Status: "Done", StatusCategory: "done"}}
 	m := newTestModel().WithJira(fj)
 	m.width, m.height = 100, 30
 	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{jiraMR()}}))
@@ -658,7 +658,7 @@ func TestExpandDoesNotRefetchCachedTicket(t *testing.T) {
 	if cmd != nil {
 		cmd()
 	}
-	m, _ = update(m, jiraMsg{key: "ECFX-1234", ticket: fj.t}) // cache it
+	m, _ = update(m, jiraMsg{key: "PROJ-1234", ticket: fj.t}) // cache it
 	callsAfterFirst := fj.calls
 	// collapse + re-expand -> must NOT refetch (cached & fresh)
 	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEnter}) // collapse
@@ -705,7 +705,7 @@ func TestJiraDisabledShowsReasonOnExpand(t *testing.T) {
 	// MR shows the reason, not nothing.
 	m := newTestModel().WithJiraDisabled("status off: set JIRA_EMAIL + JIRA_API_TOKEN")
 	m.width, m.height = 100, 40
-	item := jiraMR() // has TicketKey ECFX-1234, role review_requested
+	item := jiraMR() // has TicketKey PROJ-1234, role review_requested
 	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
 	m = u.(Model)
 	// expand — must NOT fetch (no client) and must show the reason
@@ -716,7 +716,7 @@ func TestJiraDisabledShowsReasonOnExpand(t *testing.T) {
 	m2, _ := update(m, tea.KeyMsg{Type: tea.KeyEnter}) // collapse
 	m3, _ := update(m2, tea.KeyMsg{Type: tea.KeyEnter}) // expand again
 	v := m3.View()
-	if !strings.Contains(v, "ECFX-1234") || !strings.Contains(v, "JIRA_EMAIL") {
+	if !strings.Contains(v, "PROJ-1234") || !strings.Contains(v, "JIRA_EMAIL") {
 		t.Errorf("expanded detail should explain jira is off:\n%s", v)
 	}
 }

@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dmitry/mrglass/internal/core"
-	"github.com/dmitry/mrglass/internal/jira"
-	"github.com/dmitry/mrglass/internal/tui/theme"
+	"github.com/whitel1ght/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/jira"
+	"github.com/whitel1ght/mrglass/internal/tui/theme"
 )
 
 const indent = "      " // detail lines sit under the row's title

@@ -13,7 +13,7 @@ Goals:
 1. **Forge selection by config**: `forge: gitlab | github`. Add a GitHub provider
    behind the existing `provider.Provider` interface; `main` picks by config.
 2. **Generic ticket open**: replace `jira.baseURL`-specific URL building with a
-   configurable `tickets.urlTemplate` (e.g. `https://ecfxdev.atlassian.net/browse/{key}`,
+   configurable `tickets.urlTemplate` (e.g. `https://acme.atlassian.net/browse/{key}`,
    or `https://linear.app/acme/issue/{key}`, or a GitHub-issues URL). Works for
    ANY tracker with zero per-tracker code. `J` uses it.
 3. Keep everything working: list/diff/triage/review for GitLab; open-in-browser
@@ -39,11 +39,11 @@ Non-goals (later, documented):
 forge: gitlab          # gitlab | github   (default: gitlab)
 
 tickets:
-  # {key} is replaced with the ticket key (e.g. ECFX-9340). Empty = ticket open disabled.
-  urlTemplate: "https://ecfxdev.atlassian.net/browse/{key}"
+  # {key} is replaced with the ticket key (e.g. PROJ-9340). Empty = ticket open disabled.
+  urlTemplate: "https://acme.atlassian.net/browse/{key}"
   # inline status (Jira only for now); needs JIRA_EMAIL/JIRA_API_TOKEN in env
   status: jira          # jira | none      (default: none)
-  jiraBaseURL: "https://ecfxdev.atlassian.net"   # used only when status: jira
+  jiraBaseURL: "https://acme.atlassian.net"   # used only when status: jira
 ```
 - New `Forge string` (default "gitlab").
 - New `Tickets TicketsConfig { URLTemplate, Status, JiraBaseURL string }`.

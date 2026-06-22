@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dmitry/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/core"
 )
 
 // GitRunner runs git with args in repoDir. Fakeable in tests.
@@ -45,7 +45,7 @@ func FetchRef(forge string, mr core.MR) (string, error) {
 var slugUnsafe = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 // Slug is a stable, filesystem-safe per-MR worktree name, e.g.
-// "ecfx-k8s-ECFX-1234" (repo name + ticket key, or the MR iid when no ticket).
+// "api-PROJ-1234" (repo name + ticket key, or the MR iid when no ticket).
 func Slug(mr core.MR) string {
 	repo := mr.Ref
 	if i := strings.IndexAny(repo, "!#"); i >= 0 {

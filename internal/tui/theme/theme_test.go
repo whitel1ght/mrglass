@@ -3,7 +3,7 @@ package theme
 import (
 	"testing"
 
-	"github.com/dmitry/mrglass/internal/config"
+	"github.com/whitel1ght/mrglass/internal/config"
 )
 
 func TestGetUnknownFallsBackToTokyonight(t *testing.T) {

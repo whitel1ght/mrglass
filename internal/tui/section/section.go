@@ -4,7 +4,7 @@ import (
 	"sort"
 
 	"github.com/expr-lang/expr"
-	"github.com/dmitry/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/core"
 )
 
 func env(mr core.MR, approvalsRequired int) map[string]any {

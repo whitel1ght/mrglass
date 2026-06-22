@@ -8,9 +8,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/dmitry/mrglass/internal/config"
-	"github.com/dmitry/mrglass/internal/core"
-	"github.com/dmitry/mrglass/internal/tui/theme"
+	"github.com/whitel1ght/mrglass/internal/config"
+	"github.com/whitel1ght/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/tui/theme"
 )
 
 func baseRow() RowView {

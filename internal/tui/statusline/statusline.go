@@ -7,9 +7,9 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/expr-lang/expr"
-	"github.com/dmitry/mrglass/internal/config"
-	"github.com/dmitry/mrglass/internal/core"
-	"github.com/dmitry/mrglass/internal/tui/theme"
+	"github.com/whitel1ght/mrglass/internal/config"
+	"github.com/whitel1ght/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/tui/theme"
 )
 
 // RowView is the render input: an MR plus UI-only facts.

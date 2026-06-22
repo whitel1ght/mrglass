@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dmitry/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/core"
 )
 
 func TestFetchRef(t *testing.T) {
@@ -28,8 +28,8 @@ func TestSlug(t *testing.T) {
 		mr   core.MR
 		want string
 	}{
-		{core.MR{Ref: "ecfx/infra/ecfx-k8s!288", TicketKey: "ECFX-1234"}, "ecfx-k8s-ECFX-1234"},
-		{core.MR{Ref: "ecfx/ecfx-k8s!288", TicketKey: "Other", IID: 288}, "ecfx-k8s-288"},
+		{core.MR{Ref: "acme/infra/api!288", TicketKey: "PROJ-1234"}, "api-PROJ-1234"},
+		{core.MR{Ref: "acme/api!288", TicketKey: "Other", IID: 288}, "api-288"},
 		{core.MR{Ref: "owner/repo#42", TicketKey: "", IID: 42}, "repo-42"},
 	}
 	for _, c := range cases {
@@ -105,7 +105,7 @@ func TestPrepareFetchErrorSurfaces(t *testing.T) {
 // --- launcher ---
 
 func TestBuildArgsSubstitutes(t *testing.T) {
-	argv, err := BuildArgs("tmux new-window -c {dir} {cmd}", "/wt/x", "claude", "you/b", "ECFX-1")
+	argv, err := BuildArgs("tmux new-window -c {dir} {cmd}", "/wt/x", "claude", "you/b", "PROJ-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,13 +117,13 @@ func TestBuildArgsSubstitutes(t *testing.T) {
 
 func TestBuildArgsKeepsQuotedCmdTogether(t *testing.T) {
 	// workCmd with spaces, quoted in the template, must stay one arg
-	argv, err := BuildArgs(`tmux new-window -c {dir} {cmd}`, "/wt", `claude "address {key}"`, "b", "ECFX-9")
+	argv, err := BuildArgs(`tmux new-window -c {dir} {cmd}`, "/wt", `claude "address {key}"`, "b", "PROJ-9")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// {cmd} expands to: claude "address ECFX-9"  → tokens: claude, address ECFX-9
-	last := argv[len(argv)-2:] // "claude", "address ECFX-9"
-	if last[0] != "claude" || last[1] != "address ECFX-9" {
+	// {cmd} expands to: claude "address PROJ-9"  → tokens: claude, address PROJ-9
+	last := argv[len(argv)-2:] // "claude", "address PROJ-9"
+	if last[0] != "claude" || last[1] != "address PROJ-9" {
 		t.Errorf("quoted cmd not preserved: %v", argv)
 	}
 }

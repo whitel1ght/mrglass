@@ -1,10 +1,10 @@
 package watch
 
 import (
-	"github.com/dmitry/mrglass/internal/analyze"
-	"github.com/dmitry/mrglass/internal/config"
-	"github.com/dmitry/mrglass/internal/core"
-	"github.com/dmitry/mrglass/internal/provider"
+	"github.com/whitel1ght/mrglass/internal/analyze"
+	"github.com/whitel1ght/mrglass/internal/config"
+	"github.com/whitel1ght/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/provider"
 )
 
 type FetchResult struct {

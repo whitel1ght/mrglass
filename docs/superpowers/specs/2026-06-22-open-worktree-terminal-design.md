@@ -59,7 +59,7 @@ on-branch, vs throwaway + detached).
 //   branch    the MR source branch name
 //   fetchRef  forge fetch ref for the MR head (e.g. "merge-requests/12/head")
 //   baseDir   where to put worktrees ("" → <repoDir>/../.mrglass-worktrees)
-//   slug      stable per-MR name (e.g. "ecfx-k8s-ECFX-1234")
+//   slug      stable per-MR name (e.g. "api-PROJ-1234")
 // Returns (dir, error).
 func Prepare(repoDir, branch, fetchRef, baseDir, slug string) (string, error)
 ```

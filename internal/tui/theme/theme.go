@@ -2,7 +2,7 @@ package theme
 
 import (
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dmitry/mrglass/internal/config"
+	"github.com/whitel1ght/mrglass/internal/config"
 )
 
 type Theme struct {

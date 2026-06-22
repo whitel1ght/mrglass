@@ -8,12 +8,12 @@ permalink and reuses the existing OS-opener.
 
 ## Background
 
-Every `core.MR` already carries a parsed `TicketKey` (e.g. `ECFX-1234`, from the
+Every `core.MR` already carries a parsed `TicketKey` (e.g. `PROJ-1234`, from the
 title or source branch via `ticketRegex`); MRs with no match have `TicketKey ==
 "Other"`. Every Jira ticket — Cloud or Data Center — has a canonical permalink:
 
 ```
-<baseURL>/browse/<KEY>      e.g. https://ecfx.atlassian.net/browse/ECFX-1234
+<baseURL>/browse/<KEY>      e.g. https://acme.atlassian.net/browse/PROJ-1234
 ```
 
 Opening that URL needs no API token and no network call from mrglass — just the
@@ -25,7 +25,7 @@ token) is deliberately out of scope and will be its own branch.
 
 ## Requirements
 
-- **Config**: one new field `jira.baseURL` (string), e.g. `https://ecfx.atlassian.net`.
+- **Config**: one new field `jira.baseURL` (string), e.g. `https://acme.atlassian.net`.
   Trailing slash tolerated. Empty by default (feature simply prompts to configure).
 - **Hotkey `J`** (capital; lowercase `j` is line-down): on the selected MR, open
   `<baseURL>/browse/<TicketKey>` in the browser.

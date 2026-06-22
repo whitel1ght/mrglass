@@ -87,13 +87,13 @@ func TestForgeGitHubAccepted(t *testing.T) {
 func TestLegacyJiraBaseURLMigrates(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "c.yaml")
-	os.WriteFile(p, []byte("jira:\n  baseURL: https://ecfxdev.atlassian.net\n"), 0o644)
+	os.WriteFile(p, []byte("jira:\n  baseURL: https://acme.atlassian.net\n"), 0o644)
 	c, warns := Load(p)
-	want := "https://ecfxdev.atlassian.net/browse/{key}"
+	want := "https://acme.atlassian.net/browse/{key}"
 	if c.Tickets.URLTemplate != want {
 		t.Errorf("legacy jira.baseURL should migrate to urlTemplate %q, got %q", want, c.Tickets.URLTemplate)
 	}
-	if c.Tickets.JiraBaseURL != "https://ecfxdev.atlassian.net" || c.Tickets.Status != "jira" {
+	if c.Tickets.JiraBaseURL != "https://acme.atlassian.net" || c.Tickets.Status != "jira" {
 		t.Errorf("migration should set jiraBaseURL+status, got %+v", c.Tickets)
 	}
 	if c.Jira.BaseURL != "" {

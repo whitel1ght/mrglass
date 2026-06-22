@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dmitry/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/core"
 )
 
 func TestProjectPath(t *testing.T) {
@@ -30,20 +30,20 @@ func mkGitRepo(t *testing.T, dir string) {
 
 func TestResolveDirByName(t *testing.T) {
 	base := t.TempDir()
-	mkGitRepo(t, filepath.Join(base, "ecfx-dashboard"))
-	mr := core.MR{Ref: "ecfx/ecfx-dashboard!2034"}
+	mkGitRepo(t, filepath.Join(base, "web"))
+	mr := core.MR{Ref: "acme/web!2034"}
 	got, ok := ResolveDir(mr, base, nil)
-	if !ok || got != filepath.Join(base, "ecfx-dashboard") {
+	if !ok || got != filepath.Join(base, "web") {
 		t.Errorf("by-name resolve failed: got=%q ok=%v", got, ok)
 	}
 }
 
 func TestResolveDirByNestedPath(t *testing.T) {
 	base := t.TempDir()
-	mkGitRepo(t, filepath.Join(base, "ecfx", "ecfx-dashboard"))
-	mr := core.MR{Ref: "ecfx/ecfx-dashboard!1"}
+	mkGitRepo(t, filepath.Join(base, "acme", "web"))
+	mr := core.MR{Ref: "acme/web!1"}
 	got, ok := ResolveDir(mr, base, nil)
-	if !ok || got != filepath.Join(base, "ecfx", "ecfx-dashboard") {
+	if !ok || got != filepath.Join(base, "acme", "web") {
 		t.Errorf("nested resolve failed: got=%q ok=%v", got, ok)
 	}
 }

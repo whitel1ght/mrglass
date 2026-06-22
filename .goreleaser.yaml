@@ -1,7 +1,9 @@
 version: 2
+
 before:
   hooks:
     - go mod tidy
+
 builds:
   - main: ./cmd/mrglass
     binary: mrglass
@@ -11,13 +13,34 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w -X main.version={{.Version}}
+
 archives:
   - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
+
 release:
   github:
-    owner: dmitry
+    owner: whitel1ght
     name: mrglass
+
+# Publish a Homebrew formula to the whitel1ght/homebrew-tap repo on each release.
+# Users then: `brew tap whitel1ght/tap && brew install mrglass`.
+brews:
+  - name: mrglass
+    repository:
+      owner: whitel1ght
+      name: homebrew-tap
+      # CI provides this token (a PAT with write access to the tap repo).
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/whitel1ght/mrglass"
+    description: "Interactive TUI dashboard for GitLab/GitHub merge requests with Claude review, ticket integration, and worktree workflows"
+    license: "MIT"
+    directory: Formula
+    install: |
+      bin.install "mrglass"
+    test: |
+      system "#{bin}/mrglass", "--version"

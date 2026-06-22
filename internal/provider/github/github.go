@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dmitry/mrglass/internal/core"
-	"github.com/dmitry/mrglass/internal/provider"
+	"github.com/whitel1ght/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/provider"
 )
 
 // GitHubProvider implements provider.Provider via the gh CLI. It mirrors the

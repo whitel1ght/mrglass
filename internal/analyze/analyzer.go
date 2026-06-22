@@ -2,7 +2,7 @@
 // gated by a pure-Go pre-filter so tokens are spent only when warranted.
 package analyze
 
-import "github.com/dmitry/mrglass/internal/core"
+import "github.com/whitel1ght/mrglass/internal/core"
 
 // Advice is the result of triaging one change.
 type Advice struct {

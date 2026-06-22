@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/dmitry/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/core"
 )
 
 // CmdRunner runs the claude CLI with the given stdin and args. Fakeable in tests.
