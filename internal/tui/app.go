@@ -226,8 +226,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case postResultMsg:
 		m.pendingReview = nil
 		if msg.err != nil {
-			m.status = "⚠ could not post comment: " + msg.err.Error()
+			// The status bar truncates; log the full post error so it's readable.
+			review.Logf("post %s FAILED: %v", msg.ref, msg.err)
+			m.status = "⚠ could not post comment: " + msg.err.Error() +
+				"  (full error: " + review.LogPath() + ")"
 		} else {
+			review.Logf("post %s OK", msg.ref)
 			m.status = "✓ review posted to " + msg.ref
 		}
 		return m, nil

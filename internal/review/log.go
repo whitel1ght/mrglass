@@ -23,6 +23,10 @@ func LogPath() string { return logPath() }
 // swap it to capture output.
 var logSink = appendToFile
 
+// Logf is the exported logger so other packages (e.g. the TUI) can record
+// review/post outcomes to the same review log.
+func Logf(format string, args ...any) { logf(format, args...) }
+
 // logf records a timestamped line about a review (both successes — for an audit
 // trail of which skill ran — and failures, with the full untruncated error).
 func logf(format string, args ...any) {

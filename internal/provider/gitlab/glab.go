@@ -1,7 +1,9 @@
 package gitlab
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"time"
@@ -19,7 +21,18 @@ func (ExecRunner) Run(args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "glab", args...)
-	return cmd.Output()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		// glab puts the real failure (auth, 4xx, validation) on stderr; without
+		// this the caller only sees an opaque "exit status N".
+		if s := strings.TrimSpace(stderr.String()); s != "" {
+			err = fmt.Errorf("%v: %s", err, s)
+		}
+	}
+	return stdout.Bytes(), err
 }
 
 // APIGet runs `glab api <path>`, retrying transient transport failures.
