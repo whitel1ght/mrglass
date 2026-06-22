@@ -699,3 +699,37 @@ func TestExpandNoFetchWhenNoTicket(t *testing.T) {
 		t.Errorf("MR with no ticket must not fetch (cmd=%v calls=%d)", cmd != nil, fj.calls)
 	}
 }
+
+func TestJiraDisabledShowsReasonOnExpand(t *testing.T) {
+	// status: jira requested but no token → WithJiraDisabled → expanded ticketed
+	// MR shows the reason, not nothing.
+	m := newTestModel().WithJiraDisabled("status off: set JIRA_EMAIL + JIRA_API_TOKEN")
+	m.width, m.height = 100, 40
+	item := jiraMR() // has TicketKey ECFX-1234, role review_requested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	// expand — must NOT fetch (no client) and must show the reason
+	_, cmd := update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Error("disabled jira must not issue a fetch on expand")
+	}
+	m2, _ := update(m, tea.KeyMsg{Type: tea.KeyEnter}) // collapse
+	m3, _ := update(m2, tea.KeyMsg{Type: tea.KeyEnter}) // expand again
+	v := m3.View()
+	if !strings.Contains(v, "ECFX-1234") || !strings.Contains(v, "JIRA_EMAIL") {
+		t.Errorf("expanded detail should explain jira is off:\n%s", v)
+	}
+}
+
+func TestNoJiraNoteWhenStatusNotRequested(t *testing.T) {
+	// jira nil AND no note (status: none) → expanded ticketed MR shows no 🎫 line
+	m := newTestModel() // no WithJira / WithJiraDisabled
+	m.width, m.height = 100, 40
+	item := jiraMR()
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEnter}) // expand
+	if strings.Contains(m.View(), "🎫") {
+		t.Errorf("no ticket line when status not requested:\n%s", m.View())
+	}
+}

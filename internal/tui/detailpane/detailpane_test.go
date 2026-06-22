@@ -47,3 +47,10 @@ func TestTicketHiddenWhenNotShown(t *testing.T) {
 		t.Errorf("no ticket line should render when Show=false: %q", out)
 	}
 }
+
+func TestTicketNoteShownWhenStatusOff(t *testing.T) {
+	out := Render(st(), baseMR(), "", TicketView{Show: true, Key: "ECFX-1", Note: "status off: set JIRA_EMAIL + JIRA_API_TOKEN"})
+	if !strings.Contains(out, "ECFX-1") || !strings.Contains(out, "JIRA_EMAIL") {
+		t.Errorf("note line should explain why status is off: %q", out)
+	}
+}
