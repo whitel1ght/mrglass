@@ -20,12 +20,18 @@ import (
 // token budget. Truncated diffs still yield a useful high-level review.
 const maxDiffChars = 60000
 
-// GitLab is the narrow forge capability the review feature needs: read the diff,
-// and (post-confirmation) post a note. Implemented by the gitlab provider.
-type GitLab interface {
-	MRDiff(projectID, iid int) (string, error)
-	PostNote(projectID, iid int, body string) error
+// ReviewForge is the narrow forge capability the review feature needs: read an
+// MR's diff, and (post-confirmation) post a comment. Both the GitLab and GitHub
+// providers implement it. Taking the whole core.MR (rather than raw IDs) lets
+// each forge extract what it needs — GitLab uses ProjectID+IID, GitHub parses
+// owner/repo#number from the Ref.
+type ReviewForge interface {
+	MRDiff(mr core.MR) (string, error)
+	PostNote(mr core.MR, body string) error
 }
+
+// GitLab is a deprecated alias for ReviewForge (kept for any external callers).
+type GitLab = ReviewForge
 
 // Result is the outcome of generating a review (before posting).
 type Result struct {
@@ -70,7 +76,7 @@ type Options struct {
 // of the MR branch so Claude has full project context; otherwise it falls back
 // to a diff-only review. It never posts — posting is a separate, confirmed step.
 func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string, opts Options) Result {
-	diff, err := gl.MRDiff(mr.ProjectID, mr.IID)
+	diff, err := gl.MRDiff(mr)
 	if err != nil {
 		return Result{Ref: mr.Ref, Err: fmt.Errorf("fetch diff: %w", err)}
 	}
@@ -126,8 +132,8 @@ func Generate(gl GitLab, rv Reviewer, mr core.MR, prompt string, opts Options) R
 }
 
 // Post writes the (confirmed) review text as a comment on the MR.
-func Post(gl GitLab, mr core.MR, body string) error {
-	return gl.PostNote(mr.ProjectID, mr.IID, body)
+func Post(gl ReviewForge, mr core.MR, body string) error {
+	return gl.PostNote(mr, body)
 }
 
 // CmdRunner runs the claude CLI with stdin, a working directory (empty = current),

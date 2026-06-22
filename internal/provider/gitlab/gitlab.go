@@ -119,9 +119,9 @@ func (p *GitLabProvider) enrich(mr core.MR) core.MR {
 }
 
 // MRDiff returns a compact unified diff for an MR (path + per-file diff hunk),
-// fetched via the changes endpoint. Used by the review feature.
-func (p *GitLabProvider) MRDiff(projectID, iid int) (string, error) {
-	path := fmt.Sprintf("projects/%d/merge_requests/%d/changes", projectID, iid)
+// fetched via the changes endpoint. Implements review.ReviewForge.
+func (p *GitLabProvider) MRDiff(mr core.MR) (string, error) {
+	path := fmt.Sprintf("projects/%d/merge_requests/%d/changes", mr.ProjectID, mr.IID)
 	out, err := APIGet(p.R, path, 2)
 	if err != nil {
 		return "", err
@@ -148,9 +148,9 @@ func (p *GitLabProvider) MRDiff(projectID, iid int) (string, error) {
 }
 
 // PostNote posts a comment on an MR. This is a write; it is performed only after
-// the user confirms (the caller gates it).
-func (p *GitLabProvider) PostNote(projectID, iid int, body string) error {
-	path := fmt.Sprintf("projects/%d/merge_requests/%d/notes", projectID, iid)
+// the user confirms (the caller gates it). Implements review.ReviewForge.
+func (p *GitLabProvider) PostNote(mr core.MR, body string) error {
+	path := fmt.Sprintf("projects/%d/merge_requests/%d/notes", mr.ProjectID, mr.IID)
 	_, err := APIPost(p.R, path, map[string]string{"body": body})
 	return err
 }

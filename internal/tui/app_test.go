@@ -45,8 +45,8 @@ type fakeReviewGL struct {
 	postCalled bool
 }
 
-func (f *fakeReviewGL) MRDiff(int, int) (string, error) { return "a diff", nil }
-func (f *fakeReviewGL) PostNote(_, _ int, body string) error {
+func (f *fakeReviewGL) MRDiff(core.MR) (string, error) { return "a diff", nil }
+func (f *fakeReviewGL) PostNote(_ core.MR, body string) error {
 	f.postCalled, f.posted = true, body
 	return nil
 }
@@ -498,8 +498,8 @@ type flakyGL struct {
 	postCalled int
 }
 
-func (flakyGL) MRDiff(int, int) (string, error) { return "a diff", nil }
-func (f *flakyGL) PostNote(_, _ int, body string) error {
+func (flakyGL) MRDiff(core.MR) (string, error) { return "a diff", nil }
+func (f *flakyGL) PostNote(_ core.MR, body string) error {
 	f.postCalled++
 	if f.failsLeft > 0 {
 		f.failsLeft--

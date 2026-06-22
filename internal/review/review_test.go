@@ -16,8 +16,8 @@ type fakeGitLab struct {
 	postCalled bool
 }
 
-func (f *fakeGitLab) MRDiff(int, int) (string, error) { return f.diff, f.diffErr }
-func (f *fakeGitLab) PostNote(_, _ int, body string) error {
+func (f *fakeGitLab) MRDiff(core.MR) (string, error) { return f.diff, f.diffErr }
+func (f *fakeGitLab) PostNote(_ core.MR, body string) error {
 	f.postCalled = true
 	f.posted = body
 	return f.postErr

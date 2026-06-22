@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/dmitry/mrglass/internal/core"
 )
 
 type fakeRunner struct {
@@ -71,7 +73,7 @@ func TestMRDiffFormatsChanges(t *testing.T) {
 	body := []byte(`{"changes":[{"old_path":"a.go","new_path":"a.go","diff":"@@ -1 +1 @@\n-x\n+y\n"},{"new_path":"b.go","diff":"@@ +1 @@\n+new\n"}]}`)
 	f := &fakeRunner{outs: [][]byte{body}, errs: []error{nil}}
 	p := &GitLabProvider{R: f}
-	out, err := p.MRDiff(42, 7)
+	out, err := p.MRDiff(core.MR{ProjectID: 42, IID: 7})
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -89,7 +91,7 @@ func TestMRDiffFormatsChanges(t *testing.T) {
 func TestPostNoteArgs(t *testing.T) {
 	f := &fakeRunner{outs: [][]byte{[]byte(`{"id":1}`)}, errs: []error{nil}}
 	p := &GitLabProvider{R: f}
-	if err := p.PostNote(42, 7, "looks good"); err != nil {
+	if err := p.PostNote(core.MR{ProjectID: 42, IID: 7}, "looks good"); err != nil {
 		t.Fatalf("err: %v", err)
 	}
 	got := strings.Join(f.args[0], " ")
