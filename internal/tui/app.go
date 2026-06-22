@@ -16,6 +16,7 @@ import (
 	"github.com/dmitry/mrglass/internal/analyze"
 	"github.com/dmitry/mrglass/internal/config"
 	"github.com/dmitry/mrglass/internal/core"
+	"github.com/dmitry/mrglass/internal/jira"
 	"github.com/dmitry/mrglass/internal/provider"
 	"github.com/dmitry/mrglass/internal/review"
 	"github.com/dmitry/mrglass/internal/tui/detailpane"
@@ -35,6 +36,11 @@ type reviewMsg review.Result
 type postResultMsg struct {
 	ref string
 	err error
+}
+type jiraMsg struct {
+	key    string
+	ticket jira.Ticket
+	err    error
 }
 
 // pending holds a generated review awaiting the user's post/discard decision.
@@ -69,6 +75,12 @@ type Model struct {
 	reviewVP      viewport.Model // scrollable view of the pending review
 	reviewing     bool          // a review is in flight
 
+	jira      jira.Client // nil when Jira isn't configured
+	tickets   map[string]jira.Ticket
+	ticketErr map[string]bool
+	ticketing map[string]bool      // fetch in flight per key
+	ticketAt  map[string]time.Time // last successful fetch per key (TTL)
+
 	autoTriage bool
 	status     string
 	showHelp   bool
@@ -76,11 +88,20 @@ type Model struct {
 	height     int
 }
 
+// ticketTTL is how long a fetched ticket stays fresh before an expand refetches.
+const ticketTTL = 5 * time.Minute
+
 // WithReview wires the on-demand Claude review feature. Both must be non-nil for
 // the 'c' hotkey to do anything; main passes nil for either when unavailable.
 func (m Model) WithReview(rv review.Reviewer, gl review.GitLab) Model {
 	m.reviewer = rv
 	m.reviewGL = gl
+	return m
+}
+
+// WithJira wires inline Jira ticket status. nil client → feature off.
+func (m Model) WithJira(c jira.Client) Model {
+	m.jira = c
 	return m
 }
 
@@ -91,6 +112,10 @@ func New(cfg config.Config, p provider.Provider, me string, az analyze.Analyzer,
 		styles:     theme.BuildStyles(theme.Get(cfg.Theme)),
 		advice:     map[string]string{},
 		expanded:   map[string]bool{},
+		tickets:    map[string]jira.Ticket{},
+		ticketErr:  map[string]bool{},
+		ticketing:  map[string]bool{},
+		ticketAt:   map[string]time.Time{},
 		autoTriage: cfg.AutoTriage && az != nil,
 		status:     "loading…",
 	}
@@ -151,6 +176,58 @@ func (m Model) postCmd(mr core.MR, body string) tea.Cmd {
 	return func() tea.Msg {
 		return postResultMsg{ref: mr.Ref, err: review.Post(gl, mr, body)}
 	}
+}
+
+// jiraFetchCmd fetches one ticket's status asynchronously.
+func (m Model) jiraFetchCmd(key string) tea.Cmd {
+	c := m.jira
+	return func() tea.Msg {
+		t, err := c.Fetch(key)
+		return jiraMsg{key: key, ticket: t, err: err}
+	}
+}
+
+// maybeFetchTicket returns a fetch command for the MR's ticket if Jira is
+// configured, the MR has a real ticket, and it isn't cached-fresh or in flight.
+func (m *Model) maybeFetchTicket(mr core.MR) tea.Cmd {
+	if m.jira == nil {
+		return nil
+	}
+	key := mr.TicketKey
+	if key == "" || key == "Other" {
+		return nil
+	}
+	if m.ticketing[key] {
+		return nil
+	}
+	if at, ok := m.ticketAt[key]; ok && time.Since(at) < ticketTTL {
+		return nil // cached & fresh
+	}
+	m.ticketing[key] = true
+	delete(m.ticketErr, key)
+	return m.jiraFetchCmd(key)
+}
+
+// ticketView assembles the detailpane TicketView for an MR from current state.
+func (m Model) ticketView(mr core.MR) detailpane.TicketView {
+	key := mr.TicketKey
+	if m.jira == nil || key == "" || key == "Other" {
+		return detailpane.TicketView{} // Show:false → nothing rendered
+	}
+	tv := detailpane.TicketView{Show: true, Key: key}
+	switch {
+	case m.ticketErr[key]:
+		tv.Err = true
+	case m.ticketing[key]:
+		tv.Loading = true
+	default:
+		if t, ok := m.tickets[key]; ok {
+			tv.T = t
+		} else {
+			tv.Loading = true // expanded but fetch not yet kicked off / pending
+		}
+	}
+	return tv
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -262,6 +339,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case jiraMsg:
+		delete(m.ticketing, msg.key)
+		if msg.err != nil {
+			m.ticketErr[msg.key] = true
+		} else {
+			m.tickets[msg.key] = msg.ticket
+			m.ticketAt[msg.key] = time.Now()
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -360,6 +447,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Refresh):
 		m.status = "refreshing…"
+		// Drop cached ticket statuses so the next expand refetches fresh data.
+		m.ticketAt = map[string]time.Time{}
 		return m, m.fetchCmd()
 	case key.Matches(msg, m.keys.ToggleAuto):
 		m.autoTriage = !m.autoTriage && m.analyzer != nil
@@ -370,6 +459,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				delete(m.expanded, mr.Ref)
 			} else {
 				m.expanded[mr.Ref] = true
+				// Lazily fetch the Jira ticket status for the newly-expanded MR.
+				if cmd := m.maybeFetchTicket(*mr); cmd != nil {
+					return m, cmd
+				}
 			}
 		}
 		return m, nil
@@ -551,7 +644,7 @@ func (m Model) View() string {
 		rv := statusline.RowView{MR: mr, HasAdvice: m.advice[mr.Ref] != "", ApprovalsRequired: mr.ApprovalsRequired}
 		rows = append(rows, marker+statusline.Render(m.cfg.Statusline, m.styles, rv, rowWidth, i == m.cursor))
 		if open {
-			rows = append(rows, detailpane.Render(m.styles, mr, m.advice[mr.Ref]))
+			rows = append(rows, detailpane.Render(m.styles, mr, m.advice[mr.Ref], m.ticketView(mr)))
 		}
 	}
 	if len(rows) == 0 {
