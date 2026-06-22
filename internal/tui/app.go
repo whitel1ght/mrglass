@@ -76,6 +76,7 @@ type Model struct {
 	reviewing     bool          // a review is in flight
 
 	jira      jira.Client // nil when Jira isn't configured
+	jiraNote  string      // when jira is nil but status was REQUESTED: why it's off
 	tickets   map[string]jira.Ticket
 	ticketErr map[string]bool
 	ticketing map[string]bool      // fetch in flight per key
@@ -102,6 +103,15 @@ func (m Model) WithReview(rv review.Reviewer, gl review.GitLab) Model {
 // WithJira wires inline Jira ticket status. nil client → feature off.
 func (m Model) WithJira(c jira.Client) Model {
 	m.jira = c
+	m.jiraNote = ""
+	return m
+}
+
+// WithJiraDisabled records why inline status is off (e.g. status requested but no
+// token) so the expanded detail explains it instead of silently showing nothing.
+func (m Model) WithJiraDisabled(reason string) Model {
+	m.jira = nil
+	m.jiraNote = reason
 	return m
 }
 
@@ -211,8 +221,16 @@ func (m *Model) maybeFetchTicket(mr core.MR) tea.Cmd {
 // ticketView assembles the detailpane TicketView for an MR from current state.
 func (m Model) ticketView(mr core.MR) detailpane.TicketView {
 	key := mr.TicketKey
-	if m.jira == nil || key == "" || key == "Other" {
-		return detailpane.TicketView{} // Show:false → nothing rendered
+	if key == "" || key == "Other" {
+		return detailpane.TicketView{} // no ticket on this MR → nothing
+	}
+	if m.jira == nil {
+		// Inline status not active. If it was REQUESTED (status: jira) but creds
+		// are missing, explain why instead of hiding it silently.
+		if m.jiraNote != "" {
+			return detailpane.TicketView{Show: true, Key: key, Note: m.jiraNote}
+		}
+		return detailpane.TicketView{} // not requested at all → nothing
 	}
 	tv := detailpane.TicketView{Show: true, Key: key}
 	switch {

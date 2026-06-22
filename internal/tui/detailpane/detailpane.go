@@ -13,12 +13,14 @@ import (
 const indent = "      " // detail lines sit under the row's title
 
 // TicketView carries the Jira-ticket state for the expanded detail. Show is
-// false when the MR has no ticket key or Jira isn't configured (render nothing).
+// false when the MR has no ticket key (render nothing). Note, when set, explains
+// why live status is unavailable (e.g. no token) instead of silently hiding it.
 type TicketView struct {
 	Show    bool
 	Key     string
 	Loading bool
 	Err     bool
+	Note    string // non-empty → show "🎫 KEY · <Note>" (e.g. "inline status off: no JIRA token")
 	T       jira.Ticket
 }
 
@@ -59,10 +61,13 @@ func ticketLines(st theme.Styles, tv TicketView) []string {
 		return nil
 	}
 	switch {
+	case tv.Note != "":
+		// Configured-but-unavailable (e.g. no token): say why, don't hide it.
+		return []string{st.Subtle.Render("🎫 " + tv.Key + " · " + tv.Note)}
 	case tv.Loading:
 		return []string{st.Subtle.Render("🎫 " + tv.Key + " · loading…")}
 	case tv.Err:
-		return []string{st.Subtle.Render("🎫 " + tv.Key + " · (status unavailable)")}
+		return []string{st.Subtle.Render("🎫 " + tv.Key + " · (status unavailable — check JIRA token)")}
 	default:
 		status := statusStyle(st, tv.T.StatusCategory).Render(tv.T.Status)
 		head := st.Base.Render("🎫 "+tv.Key+" · ") + status +

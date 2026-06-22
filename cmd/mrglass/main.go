@@ -83,8 +83,14 @@ func main() {
 	// JIRA_API_TOKEN in the env. Absent → feature off; open-in-browser (J) still
 	// works via tickets.urlTemplate.
 	if cfg.Tickets.Status == "jira" {
-		if jiraEmail, jiraToken := jira.FromEnv(); jira.Configured(cfg.Tickets.JiraBaseURL, jiraEmail, jiraToken) {
+		jiraEmail, jiraToken := jira.FromEnv()
+		switch {
+		case jira.Configured(cfg.Tickets.JiraBaseURL, jiraEmail, jiraToken):
 			m = m.WithJira(jira.HTTPClient{BaseURL: cfg.Tickets.JiraBaseURL, Email: jiraEmail, Token: jiraToken})
+		case cfg.Tickets.JiraBaseURL == "":
+			m = m.WithJiraDisabled("status off: set tickets.jiraBaseURL")
+		case jiraEmail == "" || jiraToken == "":
+			m = m.WithJiraDisabled("status off: set JIRA_EMAIL + JIRA_API_TOKEN")
 		}
 	}
 	prog := tea.NewProgram(m, tea.WithAltScreen())
