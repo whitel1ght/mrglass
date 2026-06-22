@@ -10,6 +10,7 @@ import (
 
 	"github.com/dmitry/mrglass/internal/analyze"
 	"github.com/dmitry/mrglass/internal/config"
+	"github.com/dmitry/mrglass/internal/jira"
 	"github.com/dmitry/mrglass/internal/provider/gitlab"
 	"github.com/dmitry/mrglass/internal/review"
 	"github.com/dmitry/mrglass/internal/tui"
@@ -57,6 +58,12 @@ func main() {
 	// diff, posted only after the user confirms. Needs claude on PATH.
 	if !*noReview && review.Available() {
 		m = m.WithReview(review.NewClaudeReviewer(), p)
+	}
+	// Wire inline Jira ticket status (shown when an MR is expanded). Needs
+	// jira.baseURL in config + JIRA_EMAIL/JIRA_API_TOKEN in the env; absent →
+	// feature off, open-in-browser (J) still works.
+	if jiraEmail, jiraToken := jira.FromEnv(); jira.Configured(cfg.Jira.BaseURL, jiraEmail, jiraToken) {
+		m = m.WithJira(jira.HTTPClient{BaseURL: cfg.Jira.BaseURL, Email: jiraEmail, Token: jiraToken})
 	}
 	prog := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {

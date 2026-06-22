@@ -39,7 +39,13 @@ projectsDir: ~/projects
 #   ecfx/ecfx-dashboard: ~/work/dashboard
 
 # Jira: press J on a selected MR to open its ticket (e.g. ECFX-1234) in the
-# browser at <baseURL>/browse/<KEY>. Just set the base URL — no token needed.
+# browser at <baseURL>/browse/<KEY>. Just set the base URL — no token needed for J.
+#
+# Inline ticket status (shown when you expand an MR with `enter`) additionally
+# needs Jira API credentials in the ENVIRONMENT (kept out of this file):
+#   export JIRA_EMAIL=you@company.com
+#   export JIRA_API_TOKEN=<token from id.atlassian.com/manage-profile/security/api-tokens>
+# Absent → inline status is off, but J (open-in-browser) still works.
 jira:
   baseURL: ""   # e.g. https://ecfx.atlassian.net  (or your self-hosted Jira host)
 

@@ -10,6 +10,7 @@ import (
 	"github.com/dmitry/mrglass/internal/analyze"
 	"github.com/dmitry/mrglass/internal/config"
 	"github.com/dmitry/mrglass/internal/core"
+	jiraPkg "github.com/dmitry/mrglass/internal/jira"
 	"github.com/dmitry/mrglass/internal/review"
 	"github.com/dmitry/mrglass/internal/watch"
 )
@@ -600,5 +601,101 @@ func TestOpenTicketOpens(t *testing.T) {
 	}
 	if !strings.Contains(u2.(Model).status, "ECFX-1234") {
 		t.Errorf("status should note the ticket opening, got %q", u2.(Model).status)
+	}
+}
+
+// fakeJira implements jira.Client for tests.
+type fakeJira struct {
+	t      jiraPkg.Ticket
+	err    error
+	calls  int
+	lastKey string
+}
+
+func (f *fakeJira) Fetch(key string) (jiraPkg.Ticket, error) {
+	f.calls++
+	f.lastKey = key
+	return f.t, f.err
+}
+
+func jiraMR() core.MR {
+	m := mr("g/p!1", "success")
+	m.Role = core.RoleReviewRequested
+	m.TicketKey = "ECFX-1234"
+	return m
+}
+
+func TestExpandFetchesTicketWhenConfigured(t *testing.T) {
+	fj := &fakeJira{t: jiraPkg.Ticket{Key: "ECFX-1234", Status: "In Review", StatusCategory: "indeterminate", Assignee: "Jane"}}
+	m := newTestModel().WithJira(fj)
+	m.width, m.height = 100, 30
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{jiraMR()}}))
+	m = u.(Model)
+
+	// expand -> should return a fetch cmd
+	m2, cmd := update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expanding a ticketed MR with Jira configured should fetch")
+	}
+	cmd() // runs Fetch
+	if fj.calls != 1 || fj.lastKey != "ECFX-1234" {
+		t.Errorf("Fetch should be called once with the ticket key, got calls=%d key=%q", fj.calls, fj.lastKey)
+	}
+	// deliver the result and check the detail shows it
+	m3, _ := update(m2, jiraMsg{key: "ECFX-1234", ticket: fj.t})
+	if !strings.Contains(m3.View(), "In Review") {
+		t.Errorf("expanded detail should show the ticket status:\n%s", m3.View())
+	}
+}
+
+func TestExpandDoesNotRefetchCachedTicket(t *testing.T) {
+	fj := &fakeJira{t: jiraPkg.Ticket{Key: "ECFX-1234", Status: "Done", StatusCategory: "done"}}
+	m := newTestModel().WithJira(fj)
+	m.width, m.height = 100, 30
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{jiraMR()}}))
+	m = u.(Model)
+	m, cmd := update(m, tea.KeyMsg{Type: tea.KeyEnter}) // expand -> fetch
+	if cmd != nil {
+		cmd()
+	}
+	m, _ = update(m, jiraMsg{key: "ECFX-1234", ticket: fj.t}) // cache it
+	callsAfterFirst := fj.calls
+	// collapse + re-expand -> must NOT refetch (cached & fresh)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEnter}) // collapse
+	_, cmd2 := update(m, tea.KeyMsg{Type: tea.KeyEnter}) // re-expand
+	if cmd2 != nil {
+		t.Error("re-expanding a cached, fresh ticket must not refetch")
+	}
+	if fj.calls != callsAfterFirst {
+		t.Errorf("no extra fetch expected, calls went %d -> %d", callsAfterFirst, fj.calls)
+	}
+}
+
+func TestExpandNoFetchWhenJiraUnconfigured(t *testing.T) {
+	m := newTestModel() // no WithJira
+	m.width, m.height = 100, 30
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{jiraMR()}}))
+	m = u.(Model)
+	_, cmd := update(m, tea.KeyMsg{Type: tea.KeyEnter}) // expand
+	if cmd != nil {
+		t.Error("expand must not fetch when Jira is unconfigured")
+	}
+	// detail must not contain a ticket line
+	if strings.Contains(m.View(), "🎫") {
+		t.Errorf("no ticket line when Jira unconfigured:\n%s", m.View())
+	}
+}
+
+func TestExpandNoFetchWhenNoTicket(t *testing.T) {
+	fj := &fakeJira{}
+	m := newTestModel().WithJira(fj)
+	m.width, m.height = 100, 30
+	item := jiraMR()
+	item.TicketKey = "Other" // no ticket
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	_, cmd := update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || fj.calls != 0 {
+		t.Errorf("MR with no ticket must not fetch (cmd=%v calls=%d)", cmd != nil, fj.calls)
 	}
 }
