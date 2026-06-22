@@ -548,3 +548,57 @@ func TestPostFailureKeepsReviewForRetry(t *testing.T) {
 		t.Errorf("status should confirm posted, got %q", m.status)
 	}
 }
+
+func TestOpenTicketNoBaseURL(t *testing.T) {
+	m := newTestModel()
+	m.cfg.Jira.BaseURL = "" // not configured
+	m.width, m.height = 100, 30
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	item.TicketKey = "ECFX-1234"
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	u2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("J")})
+	if cmd != nil {
+		t.Error("J with no baseURL should not open anything")
+	}
+	if !strings.Contains(u2.(Model).status, "jira.baseURL") {
+		t.Errorf("status should prompt to configure baseURL, got %q", u2.(Model).status)
+	}
+}
+
+func TestOpenTicketNoTicket(t *testing.T) {
+	m := newTestModel()
+	m.cfg.Jira.BaseURL = "https://ecfx.atlassian.net"
+	m.width, m.height = 100, 30
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	item.TicketKey = "Other" // no ticket
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	u2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("J")})
+	if cmd != nil {
+		t.Error("J on a no-ticket MR should not open anything")
+	}
+	if !strings.Contains(u2.(Model).status, "no Jira ticket") {
+		t.Errorf("status should note no ticket, got %q", u2.(Model).status)
+	}
+}
+
+func TestOpenTicketOpens(t *testing.T) {
+	m := newTestModel()
+	m.cfg.Jira.BaseURL = "https://ecfx.atlassian.net"
+	m.width, m.height = 100, 30
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	item.TicketKey = "ECFX-1234"
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	u2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("J")})
+	if cmd == nil {
+		t.Error("J with baseURL + ticket should return an open command")
+	}
+	if !strings.Contains(u2.(Model).status, "ECFX-1234") {
+		t.Errorf("status should note the ticket opening, got %q", u2.(Model).status)
+	}
+}

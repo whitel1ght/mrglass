@@ -17,3 +17,13 @@ func TestShortHelpNonEmpty(t *testing.T) {
 		t.Error("ShortHelp should list bindings")
 	}
 }
+
+func TestOpenTicketBinding(t *testing.T) {
+	k := Default()
+	if len(k.OpenTicket.Keys()) == 0 {
+		t.Error("OpenTicket must have a key bound")
+	}
+	if k.OpenTicket.Keys()[0] != "J" {
+		t.Errorf("OpenTicket should be J, got %v", k.OpenTicket.Keys())
+	}
+}

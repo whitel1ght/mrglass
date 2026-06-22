@@ -75,6 +75,16 @@ func Approved(approvedBy []string, required int) bool {
 	return len(approvedBy) > 0
 }
 
+// TicketURL builds the Jira permalink (<baseURL>/browse/<KEY>) for a ticket key.
+// It returns "" when baseURL is empty or the key is empty or "Other" (i.e. the
+// MR has no associated ticket), so callers can treat "" as "nothing to open".
+func TicketURL(baseURL, key string) string {
+	if baseURL == "" || key == "" || key == "Other" {
+		return ""
+	}
+	return strings.TrimRight(baseURL, "/") + "/browse/" + key
+}
+
 // ParseTicket extracts a ticket key from the title, then the branch, upper-cased.
 // Returns "Other" when neither matches.
 func ParseTicket(title, branch, pattern string) string {

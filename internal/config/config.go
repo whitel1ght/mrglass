@@ -69,6 +69,16 @@ type Config struct {
 	// ProjectPaths overrides the clone location per MR project path
 	// (e.g. "group/repo": "/abs/path"). Takes precedence over ProjectsDir.
 	ProjectPaths map[string]string `yaml:"projectPaths"`
+	// Jira holds Jira integration settings.
+	Jira JiraConfig `yaml:"jira"`
+}
+
+// JiraConfig configures Jira integration. v1 only opens tickets in the browser,
+// which needs just the base URL (no auth).
+type JiraConfig struct {
+	// BaseURL is the Jira site root, e.g. "https://ecfx.atlassian.net" (Cloud) or
+	// "https://jira.company.com" (Data Center). Used to build <baseURL>/browse/<KEY>.
+	BaseURL string `yaml:"baseURL"`
 }
 
 // DefaultReviewPrompt is the built-in MR-review instruction.

@@ -11,6 +11,7 @@ type KeyMap struct {
 	PrevSection key.Binding
 	Expand      key.Binding
 	Open        key.Binding
+	OpenTicket  key.Binding
 	Refresh     key.Binding
 	Triage      key.Binding
 	Review      key.Binding
@@ -28,7 +29,8 @@ func Default() KeyMap {
 		NextSection: key.NewBinding(key.WithKeys("tab", "l"), key.WithHelp("tab/l", "next section")),
 		PrevSection: key.NewBinding(key.WithKeys("shift+tab", "h"), key.WithHelp("⇧tab/h", "prev section")),
 		Expand:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "expand/collapse")),
-		Open:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open in browser")),
+		Open:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open MR in browser")),
+		OpenTicket:  key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "open Jira ticket")),
 		Refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 		Triage:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "triage")),
 		Review:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "claude review")),
@@ -39,13 +41,13 @@ func Default() KeyMap {
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.NextSection, k.Expand, k.Open, k.Review, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.NextSection, k.Expand, k.Open, k.OpenTicket, k.Review, k.Refresh, k.Help, k.Quit}
 }
 
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.Bottom},
-		{k.NextSection, k.PrevSection, k.Expand, k.Open},
+		{k.NextSection, k.PrevSection, k.Expand, k.Open, k.OpenTicket},
 		{k.Refresh, k.Triage, k.Review, k.ToggleAuto, k.Help, k.Quit},
 	}
 }

@@ -38,6 +38,11 @@ projectsDir: ~/projects
 # projectPaths:
 #   ecfx/ecfx-dashboard: ~/work/dashboard
 
+# Jira: press J on a selected MR to open its ticket (e.g. ECFX-1234) in the
+# browser at <baseURL>/browse/<KEY>. Just set the base URL — no token needed.
+jira:
+  baseURL: ""   # e.g. https://ecfx.atlassian.net  (or your self-hosted Jira host)
+
 sections:
   - title: "Needs My Review"
     filter: 'role == "review_requested" && !draft'

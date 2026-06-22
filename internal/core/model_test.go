@@ -52,3 +52,21 @@ func TestApproved(t *testing.T) {
 		}
 	}
 }
+
+func TestTicketURL(t *testing.T) {
+	cases := []struct {
+		base, key, want string
+	}{
+		{"https://ecfx.atlassian.net", "ECFX-1234", "https://ecfx.atlassian.net/browse/ECFX-1234"},
+		{"https://ecfx.atlassian.net/", "ECFX-1", "https://ecfx.atlassian.net/browse/ECFX-1"}, // trailing slash trimmed
+		{"https://jira.company.com", "ABC-9", "https://jira.company.com/browse/ABC-9"},          // self-hosted
+		{"", "ECFX-1", ""},      // no base URL -> nothing
+		{"https://x", "", ""},    // no key -> nothing
+		{"https://x", "Other", ""}, // "Other" = no ticket
+	}
+	for _, c := range cases {
+		if got := TicketURL(c.base, c.key); got != c.want {
+			t.Errorf("TicketURL(%q,%q) = %q, want %q", c.base, c.key, got, c.want)
+		}
+	}
+}
