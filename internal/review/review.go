@@ -201,25 +201,46 @@ func (cr ClaudeReviewer) reviewPlain(req ReviewReq) Result {
 	return Result{Ref: req.MR.Ref, Err: perr}
 }
 
-// reviewWithSkill invokes a Claude skill for the review and verifies (via
-// stream-json) that the skill actually ran, reporting it on the Result. Skills
-// may dispatch subagents, so the tool allowlist is wider — but still has no
-// write/GitLab capability; posting stays gated on user confirmation.
-// draftOnlyGuard neutralizes a review skill's own "then post" / approval step so
-// mrglass remains the single post gate. Review skills (e.g. mr-review) post to
-// GitLab themselves and ask their own "want me to post?" — we don't want that
-// double gate, nor an unconfirmed write. mrglass posts via glab only after the
-// user confirms in the TUI.
-const draftOnlyGuard = "IMPORTANT: Produce the review text ONLY. Do NOT post anything " +
-	"to GitLab, do NOT run glab, do NOT ask whether to post, and do NOT take any " +
-	"write/approve/label action — the calling tool handles posting after the user " +
-	"confirms. Your entire output should be just the review comment, ready to post."
+// draftOnlyGuard forbids only the WRITE step so mrglass stays the single post
+// gate — while leaving the skill free to investigate read-only. Review skills
+// (e.g. mr-review) otherwise post to GitLab themselves and ask their own "want
+// me to post?". Crucially this does NOT forbid running glab/git for *reading*:
+// that read-only investigation (prior comments, CI config, git history, sibling
+// files) is exactly what produces a deep review. mrglass posts after the user
+// confirms in the TUI.
+const draftOnlyGuard = "POSTING RULE: investigate as deeply as you need using " +
+	"read-only commands (read files, `glab` reads, `git log`/`git show`, `grep`, " +
+	"render/build commands) — but do NOT WRITE anything: no `glab mr note`/approve/" +
+	"label, no commits, no pushes, and do NOT ask whether to post. The calling tool " +
+	"posts after the user confirms. Your final output must be ONLY the review comment."
 
+// reviewWithSkill invokes a Claude skill for the review and verifies (via
+// stream-json) that the skill actually ran, reporting it on the Result. The
+// skill DRIVES its own investigation: it is pointed at the MR (run inside the
+// project worktree) rather than handed a pre-pasted diff, so it can fetch prior
+// comments, read CI/README/git history, and render manifests as it sees fit.
+// Tools are wide (read-only investigation + subagents) but the guard forbids any
+// write; posting stays gated on user confirmation.
 func (cr ClaudeReviewer) reviewWithSkill(req ReviewReq) Result {
-	instr := fmt.Sprintf(
-		"Use the Skill tool to invoke the %q skill, then apply it to review this "+
-			"merge request. %s\n\n%s", req.Skill, draftOnlyGuard,
-		reviewPrompt(req.Prompt, req.MR, req.Diff))
+	proj := ProjectPath(req.MR.Ref)
+	var instr string
+	if req.Dir != "" {
+		// Running inside the project worktree → let the skill drive: point it at
+		// the MR and let it investigate the repo itself.
+		instr = fmt.Sprintf(
+			"Use the Skill tool to invoke the %q skill and review GitLab merge request "+
+				"!%d in project %s. You are running inside a checkout of that repo at the "+
+				"MR's revision — investigate fully (read the diff, prior review comments, "+
+				"README, CI config, git history, and any sibling/related files the skill "+
+				"directs). %s\n\nReviewer guidance: %s",
+			req.Skill, req.MR.IID, proj, draftOnlyGuard, req.Prompt)
+	} else {
+		// No local checkout → fall back to handing the skill the fetched diff.
+		instr = fmt.Sprintf(
+			"Use the Skill tool to invoke the %q skill, then apply it to review this "+
+				"merge request. %s\n\n%s",
+			req.Skill, draftOnlyGuard, reviewPrompt(req.Prompt, req.MR, req.Diff))
+	}
 	args := []string{
 		"-p", instr,
 		"--output-format", "stream-json", "--verbose",

@@ -195,9 +195,33 @@ func TestClaudeReviewerWithSkillUsesStreamAndReports(t *testing.T) {
 	if !strings.Contains(f.in, "Skill tool") || !strings.Contains(f.in, "superpowers:requesting-code-review") {
 		t.Errorf("prompt should instruct invoking the skill: %q", f.in)
 	}
-	// draft-only guard: the skill must not post / ask to post itself
-	if !strings.Contains(f.in, "Do NOT post") {
-		t.Errorf("skill prompt should carry the draft-only guard: %q", f.in)
+	// guard: forbids the WRITE/post, but must still permit read-only investigation
+	if !strings.Contains(f.in, "POSTING RULE") || !strings.Contains(f.in, "do NOT WRITE") {
+		t.Errorf("skill prompt should carry the post-only guard: %q", f.in)
+	}
+}
+
+func TestSkillReviewWithWorktreeDrivesItself(t *testing.T) {
+	// With a worktree dir, the skill is pointed at the MR (drives its own
+	// investigation) rather than handed a pre-pasted diff.
+	stream := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"claude-components:mr-review"}}]}}
+{"type":"result","is_error":false,"result":"deep review"}`
+	f := &fakeCmd{out: []byte(stream)}
+	(ClaudeReviewer{R: f}).Review(ReviewReq{
+		MR: core.MR{Ref: "ecfx/infra/k8s!288", IID: 288, Title: "t"},
+		Diff: "PRE-PASTED DIFF SHOULD NOT APPEAR", Prompt: "p",
+		Skill: "claude-components:mr-review", Dir: "/tmp/wt",
+	})
+	// must point the skill at the MR + project and tell it to investigate
+	if !strings.Contains(f.in, "!288") || !strings.Contains(f.in, "ecfx/infra/k8s") {
+		t.Errorf("worktree skill prompt should reference the MR + project: %q", f.in)
+	}
+	if !strings.Contains(f.in, "investigate") {
+		t.Errorf("worktree skill prompt should direct full investigation: %q", f.in)
+	}
+	// it must NOT pre-paste the diff (the skill fetches it itself)
+	if strings.Contains(f.in, "PRE-PASTED DIFF SHOULD NOT APPEAR") {
+		t.Errorf("worktree skill review should not pre-paste the diff: %q", f.in)
 	}
 }
 
