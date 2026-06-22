@@ -65,9 +65,29 @@ func main() {
 	}
 }
 
+// defaultConfigPath finds the config, preferring the XDG/~/.config location
+// (the conventional spot for a CLI tool, and cross-platform) over Go's
+// os.UserConfigDir() — which on macOS is ~/Library/Application Support, an
+// unexpected place for a CLI config. Returns the first candidate that exists;
+// if none do, returns the ~/.config path as the create-here default.
 func defaultConfigPath() string {
+	var candidates []string
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		candidates = append(candidates, filepath.Join(xdg, "mrglass", "config.yaml"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".config", "mrglass", "config.yaml"))
+	}
 	if dir, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(dir, "mrglass", "config.yaml")
+		candidates = append(candidates, filepath.Join(dir, "mrglass", "config.yaml"))
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	if len(candidates) > 0 {
+		return candidates[0] // none exist yet → the preferred create-here path
 	}
 	return "config.yaml"
 }
