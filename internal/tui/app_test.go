@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -356,5 +357,67 @@ func TestAdviceMsgStored(t *testing.T) {
 	u2, _ := m.Update(adviceMsg(analyze.Advice{Ref: "g/p!1", Text: "rebase now"}))
 	if u2.(Model).advice["g/p!1"] != "rebase now" {
 		t.Error("advice should be stored by ref")
+	}
+}
+
+func TestReviewConfirmIsScrollableNotTruncated(t *testing.T) {
+	// A review taller than the terminal must be reachable by scrolling — the old
+	// fixed-height box silently truncated everything past the first screen.
+	gl := &fakeReviewGL{}
+	// build a long, sectioned review whose later sections are off the first screen
+	var b strings.Builder
+	b.WriteString("## Summary\nintro paragraph\n")
+	for i := 0; i < 80; i++ {
+		b.WriteString(fmt.Sprintf("filler line %d\n", i))
+	}
+	b.WriteString("## Blockers\nB1 — the important blocker\n")
+	long := b.String()
+	m := newTestModel().WithReview(fakeReviewer{text: long}, gl)
+	m.width, m.height = 100, 24 // body ~21 lines; review ~83 lines
+
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m, _ = update(m, reviewMsg(review.Result{Ref: "g/p!1", Text: long}))
+	if m.pendingReview == nil {
+		t.Fatal("should be in confirm state")
+	}
+
+	// Top of the review is visible; the Blockers section (near the bottom) is NOT
+	// yet visible in the initial viewport.
+	top := m.View()
+	if !strings.Contains(top, "## Summary") {
+		t.Errorf("top of review should be visible:\n%s", top)
+	}
+	if strings.Contains(top, "the important blocker") {
+		t.Skip("terminal tall enough to show all; scroll not exercised")
+	}
+
+	// Scroll to the bottom — the Blockers section must become reachable.
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	if !strings.Contains(m.View(), "the important blocker") {
+		t.Errorf("after scrolling, the Blockers section must be reachable:\n%s", m.View())
+	}
+}
+
+func TestScrollKeyDoesNotPostOrDiscard(t *testing.T) {
+	gl := &fakeReviewGL{}
+	m := newTestModel().WithReview(fakeReviewer{text: "## Blockers\nB1\n"}, gl)
+	m.width, m.height = 100, 24
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m, _ = update(m, reviewMsg(review.Result{Ref: "g/p!1", Text: "## Blockers\nB1\n"}))
+	// pressing j (scroll) must NOT post and must NOT leave confirm state
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.pendingReview == nil {
+		t.Error("'j' (scroll) must not discard/post the review")
+	}
+	if gl.postCalled {
+		t.Error("'j' must never post")
 	}
 }

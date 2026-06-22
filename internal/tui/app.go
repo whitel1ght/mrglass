@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -64,8 +65,9 @@ type Model struct {
 	expanded   map[string]bool // MR ref -> inline detail shown
 	advice     map[string]string
 
-	pendingReview *pending // non-nil while awaiting post/discard confirmation
-	reviewing     bool     // a review is in flight
+	pendingReview *pending      // non-nil while awaiting post/discard confirmation
+	reviewVP      viewport.Model // scrollable view of the pending review
+	reviewing     bool          // a review is in flight
 
 	autoTriage bool
 	status     string
@@ -155,6 +157,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		// Keep the review viewport sized to the window if one is open.
+		if m.pendingReview != nil {
+			m.reviewVP.Width = m.reviewWidth()
+			m.reviewVP.Height = m.reviewBodyHeight()
+		}
 		return m, nil
 
 	case tickMsg:
@@ -184,6 +191,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.pendingReview = &pending{ref: res.Ref, mr: *mr, text: res.Text}
+		// Load the full review into a scrollable viewport so structured sections
+		// (Blockers/Observations/…) past the first screen aren't truncated.
+		vp := viewport.New(m.reviewWidth(), m.reviewBodyHeight())
+		vp.SetContent(m.styles.Base.Render(res.Text))
+		m.reviewVP = vp
 		ctxNote := "diff-only"
 		if res.LocalContext {
 			ctxNote = "full project context"
@@ -279,8 +291,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.pendingReview = nil
 			m.status = "review discarded"
 			return m, nil
+		case msg.String() == "g":
+			m.reviewVP.GotoTop()
+			return m, nil
+		case msg.String() == "G":
+			m.reviewVP.GotoBottom()
+			return m, nil
 		}
-		return m, nil // swallow everything else while confirming
+		// Everything else scrolls the review (j/k, ↑/↓, PgUp/PgDn, u/d, f/b).
+		var cmd tea.Cmd
+		m.reviewVP, cmd = m.reviewVP.Update(msg)
+		return m, cmd
 	}
 
 	switch {
@@ -404,19 +425,33 @@ func openURL(url string) tea.Cmd {
 	}
 }
 
-// reviewConfirmView shows the generated review and the post/discard prompt.
+// reviewWidth/reviewBodyHeight size the scrollable review viewport, leaving room
+// for the one-line header and the one-line hint (+1 blank line).
+func (m Model) reviewWidth() int {
+	if m.width < 1 {
+		return 1
+	}
+	return m.width
+}
+
+func (m Model) reviewBodyHeight() int {
+	h := m.height - 3 // header + blank + hint
+	if h < 1 {
+		return 1
+	}
+	return h
+}
+
+// reviewConfirmView shows the scrollable review plus a scroll indicator and the
+// post/discard prompt. The full review is scrollable (j/k, ↑/↓, PgUp/PgDn) so
+// structured sections past the first screen are reachable, not truncated.
 func (m Model) reviewConfirmView() string {
 	p := m.pendingReview
-	header := m.styles.Header.Render("Claude review — " + p.ref)
-	hint := m.styles.Help.Render("Review this comment, then: [y] post to GitLab · [n]/esc discard")
-	bodyHeight := m.height - lipgloss.Height(header) - lipgloss.Height(hint) - 2
-	if bodyHeight < 1 {
-		bodyHeight = 1
-	}
-	body := lipgloss.NewStyle().
-		Width(m.width).Height(bodyHeight).
-		Render(m.styles.Base.Render(p.text))
-	return strings.Join([]string{header, "", body, hint}, "\n")
+	pct := fmt.Sprintf("%3.0f%%", m.reviewVP.ScrollPercent()*100)
+	header := m.styles.Header.Render("Claude review — "+p.ref) + "  " +
+		m.styles.Help.Render(pct)
+	hint := m.styles.Help.Render("scroll: j/k g/G PgUp/PgDn · [y] post to GitLab · [n]/esc discard")
+	return strings.Join([]string{header, "", m.reviewVP.View(), hint}, "\n")
 }
 
 func (m Model) View() string {
