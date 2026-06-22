@@ -74,10 +74,25 @@ type Config struct {
 	Forge string `yaml:"forge"`
 	// Tickets configures the issue tracker integration.
 	Tickets TicketsConfig `yaml:"tickets"`
+	// Worktree configures the `w` hotkey: open the MR branch in a terminal.
+	Worktree WorktreeConfig `yaml:"worktree"`
 
 	// Jira is the legacy Jira config; superseded by Tickets. Kept so existing
 	// configs migrate (see migrateLegacyJira). Do not use in new configs.
 	Jira JiraConfig `yaml:"jira"`
+}
+
+// WorktreeConfig configures the `w` hotkey, which checks out the MR branch in a
+// dedicated git worktree and opens it in a terminal running WorkCmd.
+type WorktreeConfig struct {
+	// OpenCommand is run (detached) to open the worktree. Placeholders mrglass
+	// fills: {dir} (worktree path), {cmd} (WorkCmd), {branch}, {key}. Empty
+	// disables `w`. E.g. "tmux new-window -c {dir} {cmd}".
+	OpenCommand string `yaml:"openCommand"`
+	// WorkCmd is what to run in the worktree (substituted as {cmd}); default "claude".
+	WorkCmd string `yaml:"workCmd"`
+	// Dir overrides where worktrees are created (default: <clone>/../.mrglass-worktrees).
+	Dir string `yaml:"dir"`
 }
 
 // TicketsConfig configures the issue tracker. Open-in-browser works for ANY
@@ -121,6 +136,7 @@ func Default() Config {
 		Theme:          "tokyonight",
 		Forge:          ForgeGitLab,
 		ReviewPrompt:   DefaultReviewPrompt,
+		Worktree:       WorktreeConfig{WorkCmd: "claude"},
 		Sections: []SectionConfig{
 			{Title: "Needs My Review", Filter: `role == "review_requested" && !draft`},
 			{Title: "Mine · Approved", Filter: `role == "mine" && len(approvedBy) > 0`},

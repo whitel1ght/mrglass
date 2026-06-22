@@ -2,7 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/dmitry/mrglass/internal/jira"
 	"github.com/dmitry/mrglass/internal/provider"
 	"github.com/dmitry/mrglass/internal/review"
+	"github.com/dmitry/mrglass/internal/worktree"
 	"github.com/dmitry/mrglass/internal/tui/detailpane"
 	"github.com/dmitry/mrglass/internal/tui/keys"
 	"github.com/dmitry/mrglass/internal/tui/section"
@@ -40,6 +43,11 @@ type postResultMsg struct {
 type jiraMsg struct {
 	key    string
 	ticket jira.Ticket
+	err    error
+}
+type worktreeMsg struct {
+	slug   string
+	branch string
 	err    error
 }
 
@@ -186,6 +194,51 @@ func (m Model) postCmd(mr core.MR, body string) tea.Cmd {
 	return func() tea.Msg {
 		return postResultMsg{ref: mr.Ref, err: review.Post(gl, mr, body)}
 	}
+}
+
+// worktreeCmd (async) ensures a persistent worktree on the MR branch exists in
+// the local clone, then launches the configured terminal command there. Both
+// git work and the launch can take a moment, so it runs off the UI loop.
+func (m Model) worktreeCmd(mr core.MR, repoDir string) tea.Cmd {
+	forge := m.cfg.Forge
+	wc := m.cfg.Worktree
+	return func() tea.Msg {
+		slug := worktree.Slug(mr)
+		ref, err := worktree.FetchRef(forge, mr)
+		if err != nil {
+			return worktreeMsg{slug: slug, err: err}
+		}
+		dir, err := worktree.New().Prepare(repoDir, mr.SourceBranch, ref, expandHomePath(wc.Dir), slug)
+		if err != nil {
+			return worktreeMsg{slug: slug, err: err}
+		}
+		workCmd := wc.WorkCmd
+		if workCmd == "" {
+			workCmd = "claude"
+		}
+		if err := worktree.Launch(worktree.ExecRunner{}, wc.OpenCommand, dir, workCmd, mr.SourceBranch, ticketOrRef(mr)); err != nil {
+			return worktreeMsg{slug: slug, err: err}
+		}
+		return worktreeMsg{slug: slug, branch: mr.SourceBranch}
+	}
+}
+
+// ticketOrRef is the {key} value: the ticket key, or the MR ref when there's none.
+func ticketOrRef(mr core.MR) string {
+	if mr.TicketKey != "" && mr.TicketKey != "Other" {
+		return mr.TicketKey
+	}
+	return mr.Ref
+}
+
+// expandHomePath expands a leading "~" to the user's home directory.
+func expandHomePath(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(strings.TrimPrefix(p, "~"), "/"))
+		}
+	}
+	return p
 }
 
 // jiraFetchCmd fetches one ticket's status asynchronously.
@@ -367,6 +420,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case worktreeMsg:
+		if msg.err != nil {
+			m.status = "⚠ open worktree failed: " + msg.err.Error()
+		} else {
+			m.status = "opened " + msg.slug + " on " + msg.branch
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -505,6 +566,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.status = "opening " + mr.TicketKey + "…"
 		return m, openURL(url)
+	case key.Matches(msg, m.keys.OpenWork):
+		mr := m.selected()
+		if mr == nil {
+			return m, nil
+		}
+		if m.cfg.Worktree.OpenCommand == "" {
+			m.status = "⚠ set worktree.openCommand in config to use w"
+			return m, nil
+		}
+		repoDir, ok := review.ResolveDir(*mr, m.cfg.ProjectsDir, m.cfg.ProjectPaths)
+		if !ok {
+			m.status = "no local clone for " + mr.Ref + " (set projectsDir/projectPaths)"
+			return m, nil
+		}
+		m.status = "opening worktree for " + worktree.Slug(*mr) + "…"
+		return m, m.worktreeCmd(*mr, repoDir)
 	case key.Matches(msg, m.keys.Triage):
 		if mr := m.selected(); mr != nil && m.analyzer != nil {
 			c := core.Change{Ref: mr.Ref, Title: mr.Title, Detail: "manual triage requested"}

@@ -42,6 +42,22 @@ projectsDir: ~/projects
 # projectPaths:
 #   ecfx/ecfx-dashboard: ~/work/dashboard
 
+# Press w on a selected MR to open its branch in a terminal, ready to work on it.
+# mrglass checks the MR branch out in a dedicated, persistent git worktree (your
+# main clone is untouched) under <clone>/../.mrglass-worktrees/, then runs
+# openCommand. Placeholders mrglass fills: {dir} (worktree path), {cmd} (workCmd
+# below), {branch}, {key}. Empty openCommand disables w. Examples:
+#   tmux new window:    tmux new-window -c {dir} {cmd}
+#   tmux new session:   tmux new-session -d -s {key} -c {dir} {cmd}
+#   iTerm2 new tab:     osascript -e 'tell application "iTerm2" to tell current window to create tab with default profile command "cd {dir} && {cmd}"'
+#   macOS Terminal:     osascript -e 'tell application "Terminal" to do script "cd {dir} && {cmd}"'
+#   kitty:              kitty @ launch --type=tab --cwd {dir} {cmd}
+#   wezterm:            wezterm cli spawn --cwd {dir} -- {cmd}
+worktree:
+  openCommand: ""        # empty disables w
+  workCmd: "claude"      # what to run in the worktree ({cmd})
+  # dir: ""              # optional: override where worktrees are created
+
 # Issue tracker (works with ANY tracker for open-in-browser).
 tickets:
   # Press J on a selected MR to open its ticket. {key} is replaced with the key

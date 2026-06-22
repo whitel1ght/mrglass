@@ -27,3 +27,10 @@ func TestOpenTicketBinding(t *testing.T) {
 		t.Errorf("OpenTicket should be J, got %v", k.OpenTicket.Keys())
 	}
 }
+
+func TestOpenWorkBinding(t *testing.T) {
+	k := Default()
+	if len(k.OpenWork.Keys()) == 0 || k.OpenWork.Keys()[0] != "w" {
+		t.Errorf("OpenWork should be w, got %v", k.OpenWork.Keys())
+	}
+}
