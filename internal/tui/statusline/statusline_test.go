@@ -162,6 +162,34 @@ func TestGrowSegmentAbsorbsOverflow(t *testing.T) {
 	}
 }
 
+func TestGrowSegmentSkipsWhenHiddenCandidate(t *testing.T) {
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+	cfg := config.StatuslineConfig{
+		Left: []config.Segment{
+			// Hidden on every row in this test (draft is false): a naive findGrow
+			// that ignores When would "shrink" this segment, which renderGroup
+			// then drops anyway -- a no-op that leaves the row overflowing.
+			{Type: "text", Source: "ref", Grow: true, When: "draft"},
+			{Type: "text", Source: "title", Grow: true, MaxWidth: 60},
+		},
+		Right: []config.Segment{{Type: "age"}},
+	}
+	rv := RowView{MR: core.MR{
+		Title:     strings.Repeat("long title ", 10),
+		Ref:       "g/p!1",
+		Draft:     false,
+		UpdatedAt: time.Now().Add(-2 * time.Hour),
+	}}
+	const width = 40
+	line := Render(cfg, st, rv, width, false)
+	if w := lipgloss.Width(line); w > width {
+		t.Errorf("row width %d exceeds terminal width %d", w, width)
+	}
+	if !strings.Contains(line, "…") {
+		t.Error("the visible grow segment should be truncated with an ellipsis")
+	}
+}
+
 func TestSegmentUnknownStyleNameKeepsDefault(t *testing.T) {
 	st := theme.BuildStyles(theme.Get("tokyonight"))
 	seg := config.Segment{Type: "text", Source: "title", Style: "nope"}

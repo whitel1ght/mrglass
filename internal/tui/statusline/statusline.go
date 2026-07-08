@@ -31,9 +31,9 @@ func Render(cfg config.StatuslineConfig, st theme.Styles, rv RowView, width int,
 	// terminal, re-render its group with the grow segment shrunk by the
 	// overflow (floor 4 runes) so the row fits instead of wrapping.
 	if over := lipgloss.Width(left) + 1 + lipgloss.Width(right) - width; over > 0 {
-		if segs, i := findGrow(cfg.Left); i >= 0 {
+		if segs, i := findGrow(cfg.Left, env); i >= 0 {
 			left = renderShrunk(segs, i, over, st, rv, env, st.Base)
-		} else if segs, i := findGrow(cfg.Right); i >= 0 {
+		} else if segs, i := findGrow(cfg.Right, env); i >= 0 {
 			right = renderShrunk(segs, i, over, st, rv, env, st.Base)
 		}
 	}
@@ -64,9 +64,16 @@ func renderGroup(segs []config.Segment, st theme.Styles, rv RowView, env map[str
 	return strings.Join(parts, " ")
 }
 
-// findGrow returns the segments and the index of the first Grow segment, or -1.
-func findGrow(segs []config.Segment) ([]config.Segment, int) {
+// findGrow returns the segments and the index of the first Grow segment that
+// is actually visible on this row, or -1. A segment hidden by its When
+// predicate is skipped: renderGroup would drop it regardless, so shrinking it
+// would be a no-op that leaves the row silently overflowing. Visibility uses
+// the same evalBool check renderGroup applies.
+func findGrow(segs []config.Segment, env map[string]any) ([]config.Segment, int) {
 	for i, s := range segs {
+		if s.When != "" && !evalBool(s.When, env) {
+			continue
+		}
 		if s.Grow {
 			return segs, i
 		}
