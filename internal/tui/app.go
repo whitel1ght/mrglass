@@ -395,6 +395,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyMRs(res.MRs)
 		m.loaded = true
 		m.status = fmt.Sprintf("%d MRs · refreshed %s", len(res.MRs), time.Now().Format("15:04"))
+		if res.Warning != "" {
+			m.status += "  ⚠ " + res.Warning
+		}
 		var cmds []tea.Cmd
 		if m.autoTriage && m.analyzer != nil {
 			for _, c := range watch.TriageWorthy(res.Changes) {

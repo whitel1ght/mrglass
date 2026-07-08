@@ -10,6 +10,7 @@ import (
 type FetchResult struct {
 	MRs     []core.MR
 	Changes []core.Change
+	Warning string // non-fatal problem (state load/save); dashboard still works
 	Err     error
 }
 
@@ -27,7 +28,7 @@ func Fetch(d Deps) FetchResult {
 	if err != nil {
 		return FetchResult{Err: err}
 	}
-	prev, _ := core.LoadState(d.StatePath)
+	prev, loadErr := core.LoadState(d.StatePath)
 	curr := map[string]core.Snapshot{}
 	for _, m := range mrs {
 		p := prev[m.Ref]
@@ -41,11 +42,19 @@ func Fetch(d Deps) FetchResult {
 	if len(prev) > 0 {
 		changes = core.Diff(prev, curr)
 	}
-	_ = core.SaveState(d.StatePath, curr)
+	var warning string
+	if loadErr != nil {
+		warning = loadErr.Error()
+	}
+	if err := core.SaveState(d.StatePath, curr); err != nil {
+		// Without persisted state every refresh looks like a first run and
+		// change detection silently dies — tell the user.
+		warning = "state save failed: " + err.Error()
+	}
 	for _, c := range changes {
 		Notify(c)
 	}
-	return FetchResult{MRs: mrs, Changes: changes}
+	return FetchResult{MRs: mrs, Changes: changes, Warning: warning}
 }
 
 // TriageWorthy filters changes down to those worth a Claude call.

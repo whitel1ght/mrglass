@@ -102,3 +102,20 @@ func TestFetchProviderErrorReturnsErrAndDoesNotWriteState(t *testing.T) {
 		t.Error("state file should not be written on provider error")
 	}
 }
+
+func TestFetchSurfacesSaveStateFailure(t *testing.T) {
+	// A state path whose parent is a FILE makes MkdirAll/WriteFile fail.
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(blocker, "state.json")
+	res := Fetch(Deps{Provider: fakeProvider{}, StatePath: statePath, Cfg: config.Default()})
+	if res.Err != nil {
+		t.Fatalf("save failure must be non-fatal, got Err=%v", res.Err)
+	}
+	if res.Warning == "" {
+		t.Error("expected a Warning when SaveState fails")
+	}
+}

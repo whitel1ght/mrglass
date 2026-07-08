@@ -154,6 +154,16 @@ func TestFetchResultPopulatesRows(t *testing.T) {
 	}
 }
 
+func TestFetchWarningShownInStatus(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 100, 30
+	updated, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: nil, Warning: "state save failed: disk full"}))
+	view := updated.(Model).View()
+	if !strings.Contains(view, "state save failed") {
+		t.Errorf("fetch warning should appear in the status line:\n%s", view)
+	}
+}
+
 func TestTabSwitchRefiltersInstantlyWithoutFetch(t *testing.T) {
 	m := newTestModel()
 	m.width, m.height = 100, 30

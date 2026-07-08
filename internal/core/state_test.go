@@ -1,6 +1,7 @@
 package core
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -30,5 +31,19 @@ func TestSaveThenLoadRoundTrips(t *testing.T) {
 	}
 	if !reflect.DeepEqual(in, out) {
 		t.Errorf("round-trip mismatch:\n in=%+v\nout=%+v", in, out)
+	}
+}
+
+func TestLoadStateCorruptFileReturnsEmptyMapAndError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := LoadState(path)
+	if err == nil {
+		t.Error("corrupt state should return an error")
+	}
+	if m == nil || len(m) != 0 {
+		t.Errorf("corrupt state should still return an empty usable map, got %v", m)
 	}
 }

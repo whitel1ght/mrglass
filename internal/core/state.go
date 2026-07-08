@@ -2,12 +2,14 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
 
-// LoadState reads a {ref: Snapshot} map. A missing or unparseable file yields an
-// empty map and no error — the caller treats that as "first run / no baseline".
+// LoadState reads a {ref: Snapshot} map. A missing file yields an empty map and
+// no error (first run). A corrupt file yields an empty map AND an error — the
+// caller can proceed as first-run but should surface the warning.
 func LoadState(path string) (map[string]Snapshot, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -18,7 +20,10 @@ func LoadState(path string) (map[string]Snapshot, error) {
 	}
 	var m map[string]Snapshot
 	if err := json.Unmarshal(b, &m); err != nil {
-		return map[string]Snapshot{}, nil
+		// Corrupt file: return a usable empty baseline plus the error, so the
+		// caller can proceed as first-run while telling the user their change
+		// history was lost.
+		return map[string]Snapshot{}, fmt.Errorf("state file %s is corrupt (%v); treating as first run", path, err)
 	}
 	return m, nil
 }
