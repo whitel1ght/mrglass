@@ -76,7 +76,7 @@ func New() Git { return Git{R: ExecGit{}} }
 // defaults to <repoDir>/../.mrglass-worktrees.
 func (g Git) Prepare(repoDir, branch, fetchRef, baseDir, slug string) (string, error) {
 	if baseDir == "" {
-		baseDir = filepath.Join(filepath.Dir(repoDir), ".mrglass-worktrees")
+		baseDir = DefaultBase(repoDir)
 	}
 	dir := filepath.Join(baseDir, slug)
 
