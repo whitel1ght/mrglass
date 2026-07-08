@@ -2,12 +2,14 @@ package section
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/vm"
 	"github.com/whitel1ght/mrglass/internal/core"
 )
 
-func env(mr core.MR, approvalsRequired int) map[string]any {
+func env(mr core.MR) map[string]any {
 	return map[string]any{
 		"role":       mr.Role.String(),
 		"ci":         mr.CI,
@@ -16,16 +18,32 @@ func env(mr core.MR, approvalsRequired int) map[string]any {
 		"unresolved": mr.Unresolved,
 		"comments":   mr.Comments,
 		"approvedBy": mr.ApprovedBy,
-		"required":   approvalsRequired,
+		"required":   mr.ApprovalsRequired,
 		"author":     mr.Author,
 		"title":      mr.Title,
 	}
 }
 
-// Match evaluates a filter predicate against an MR. A broken filter matches nothing.
-func Match(filter string, mr core.MR, approvalsRequired int) bool {
-	e := env(mr, approvalsRequired)
+// progs caches compiled filter programs; filters are fixed config strings
+// evaluated per MR per render, so compile each once.
+var progs sync.Map // filter string -> *vm.Program
+
+func compile(filter string, e map[string]any) (*vm.Program, error) {
+	if v, ok := progs.Load(filter); ok {
+		return v.(*vm.Program), nil
+	}
 	prog, err := expr.Compile(filter, expr.Env(e), expr.AsBool())
+	if err != nil {
+		return nil, err
+	}
+	progs.Store(filter, prog)
+	return prog, nil
+}
+
+// Match evaluates a filter predicate against an MR. A broken filter matches nothing.
+func Match(filter string, mr core.MR) bool {
+	e := env(mr)
+	prog, err := compile(filter, e)
 	if err != nil {
 		return false
 	}
@@ -41,7 +59,7 @@ func Match(filter string, mr core.MR, approvalsRequired int) bool {
 func Filter(filter string, mrs []core.MR) []core.MR {
 	var out []core.MR
 	for _, mr := range mrs {
-		if Match(filter, mr, 0) {
+		if Match(filter, mr) {
 			out = append(out, mr)
 		}
 	}

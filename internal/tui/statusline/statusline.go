@@ -3,10 +3,12 @@ package statusline
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/vm"
 	"github.com/whitel1ght/mrglass/internal/config"
 	"github.com/whitel1ght/mrglass/internal/core"
 	"github.com/whitel1ght/mrglass/internal/tui/theme"
@@ -289,10 +291,20 @@ func exprEnv(rv RowView) map[string]any {
 	}
 }
 
+// whenProgs caches compiled `when` predicates (fixed config strings).
+var whenProgs sync.Map // code string -> *vm.Program
+
 func evalBool(code string, env map[string]any) bool {
-	prog, err := expr.Compile(code, expr.Env(env), expr.AsBool())
-	if err != nil {
-		return false
+	var prog *vm.Program
+	if v, ok := whenProgs.Load(code); ok {
+		prog = v.(*vm.Program)
+	} else {
+		p, err := expr.Compile(code, expr.Env(env), expr.AsBool())
+		if err != nil {
+			return false
+		}
+		whenProgs.Store(code, p)
+		prog = p
 	}
 	out, err := expr.Run(prog, env)
 	if err != nil {
