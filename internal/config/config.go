@@ -211,6 +211,17 @@ func (c *Config) normalize() []string {
 		c.TicketRegex = Default().TicketRegex
 	}
 
+	// Numeric sanity. days <= 0 can't mean anything (0 would show no MRs at
+	// all); refreshMinutes: 0 is a real setting (auto-refresh off), negative isn't.
+	if c.Days <= 0 {
+		warns = append(warns, fmt.Sprintf("days: %d is invalid; using %d", c.Days, Default().Days))
+		c.Days = Default().Days
+	}
+	if c.RefreshMinutes < 0 {
+		warns = append(warns, fmt.Sprintf("refreshMinutes: %d is invalid; auto-refresh disabled", c.RefreshMinutes))
+		c.RefreshMinutes = 0
+	}
+
 	// Migrate legacy jira.baseURL → tickets.* when tickets isn't configured.
 	if c.Jira.BaseURL != "" && c.Tickets.URLTemplate == "" {
 		base := strings.TrimRight(c.Jira.BaseURL, "/")

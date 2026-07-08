@@ -156,3 +156,21 @@ func TestLoadGrouplessTicketRegexFallsBackWithWarning(t *testing.T) {
 		t.Error("expected a warning")
 	}
 }
+
+func TestLoadNumericValidation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("days: -5\nrefreshMinutes: -1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warns := Load(path)
+	if cfg.Days != 30 {
+		t.Errorf("negative days should reset to 30, got %d", cfg.Days)
+	}
+	if cfg.RefreshMinutes != 0 {
+		t.Errorf("negative refreshMinutes should reset to 0, got %d", cfg.RefreshMinutes)
+	}
+	if len(warns) < 2 {
+		t.Errorf("expected warnings for both fields, got %v", warns)
+	}
+}
