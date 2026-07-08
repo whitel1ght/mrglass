@@ -18,7 +18,7 @@ type GitHubProvider struct {
 	R Runner
 }
 
-func New() *GitHubProvider { return &GitHubProvider{R: ExecRunner{}} }
+func New() *GitHubProvider { return &GitHubProvider{R: NewRunner()} }
 
 // searchFields is the common --json field set requested for every search bucket.
 const searchFields = "number,title,url,repository,author,isDraft,createdAt,updatedAt,commentsCount"
@@ -174,7 +174,7 @@ func (p *GitHubProvider) PostNote(mr core.MR, body string) error {
 	if !ok {
 		return fmt.Errorf("github: cannot parse repo/number from ref %q", mr.Ref)
 	}
-	_, err := run(p.R, "pr", "comment", strconv.Itoa(number), "--repo", repo, "--body", body)
+	_, err := p.R.Run("pr", "comment", strconv.Itoa(number), "--repo", repo, "--body", body)
 	return err
 }
 

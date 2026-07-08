@@ -39,35 +39,8 @@ func TestAPIGetPassesArgs(t *testing.T) {
 	}
 }
 
-func TestAPIGetRetriesTransient(t *testing.T) {
-	f := &fakeRunner{
-		outs: [][]byte{nil, []byte(`{"ok":true}`)},
-		errs: []error{errors.New("read: connection reset / EOF"), nil},
-	}
-	out, err := APIGet(f, "user", 2)
-	if err != nil {
-		t.Fatalf("should have retried and succeeded, got %v", err)
-	}
-	if string(out) != `{"ok":true}` {
-		t.Errorf("out = %s", out)
-	}
-	if f.n != 2 {
-		t.Errorf("expected 2 attempts, got %d", f.n)
-	}
-}
-
-func TestAPIGetDoesNotRetryRealError(t *testing.T) {
-	f := &fakeRunner{
-		outs: [][]byte{nil},
-		errs: []error{errors.New("404 Not Found")},
-	}
-	if _, err := APIGet(f, "bad", 2); err == nil {
-		t.Fatal("expected error")
-	}
-	if f.n != 1 {
-		t.Errorf("404 should not retry, got %d attempts", f.n)
-	}
-}
+// Retry and transient-classification behavior now live in execx and are
+// tested by execx_test.go; only APIGet's arg-shape is asserted here.
 
 func TestMRDiffFormatsChanges(t *testing.T) {
 	body := []byte(`{"changes":[{"old_path":"a.go","new_path":"a.go","diff":"@@ -1 +1 @@\n-x\n+y\n"},{"new_path":"b.go","diff":"@@ +1 @@\n+new\n"}]}`)

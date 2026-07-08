@@ -16,7 +16,7 @@ type GitLabProvider struct {
 	R Runner
 }
 
-func New() *GitLabProvider { return &GitLabProvider{R: ExecRunner{}} }
+func New() *GitLabProvider { return &GitLabProvider{R: NewRunner()} }
 
 type rawMR struct {
 	IID          int    `json:"iid"`

@@ -2,12 +2,15 @@ package github
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/whitel1ght/mrglass/internal/core"
+	"github.com/whitel1ght/mrglass/internal/provider/execx"
 )
 
 const pat = `([A-Z][A-Z0-9]+-\d+)`
@@ -214,6 +217,36 @@ func TestWhoami(t *testing.T) {
 	}
 	if who != "octocat" {
 		t.Errorf("Whoami = %q, want octocat", who)
+	}
+}
+
+// flakyRunner fails its first N calls with a transient error, then delegates
+// to inner. Used to prove reads go through execx.Retry.
+type flakyRunner struct {
+	fails int // fail this many calls with a transient error, then succeed
+	inner Runner
+	calls int
+}
+
+func (f *flakyRunner) Run(args ...string) ([]byte, error) {
+	f.calls++
+	if f.calls <= f.fails {
+		return nil, errors.New("unexpected EOF")
+	}
+	return f.inner.Run(args...)
+}
+
+func TestWhoamiRetriesTransient(t *testing.T) {
+	execx.Sleep = func(time.Duration) {}
+	defer func() { execx.Sleep = time.Sleep }()
+	inner := &fakeRunner{user: []byte("octocat\n")}
+	p := &GitHubProvider{R: &flakyRunner{fails: 1, inner: inner}}
+	me, err := p.Whoami()
+	if err != nil {
+		t.Fatalf("want retry success, got %v", err)
+	}
+	if me == "" {
+		t.Error("want a username after retry")
 	}
 }
 
