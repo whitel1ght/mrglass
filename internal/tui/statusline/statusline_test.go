@@ -200,3 +200,40 @@ func TestSegmentUnknownStyleNameKeepsDefault(t *testing.T) {
 		t.Errorf("unknown style should keep default:\n got %q\nwant %q", got, want)
 	}
 }
+
+func TestStatesCIFailedRestylesBaseText(t *testing.T) {
+	// Force a color profile so the override is actually observable in the
+	// rendered escapes; otherwise a non-TTY test env degrades to plain text
+	// and the substring check below would pass vacuously either way.
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+	cfg := config.StatuslineConfig{
+		States: map[string]config.StyleConfig{"ci_failed": {FG: "#ff0000"}},
+		Left:   []config.Segment{{Type: "text", Source: "title"}},
+	}
+	rv := RowView{MR: core.MR{Title: "boom", CI: "failed"}}
+	line := Render(cfg, st, rv, 80, false)
+	want := theme.StyleFrom(config.StyleConfig{FG: "#ff0000"}).Inline(true).Render("boom")
+	if !strings.Contains(line, want) {
+		t.Errorf("ci_failed state should restyle base text\n got: %q\nwant substring: %q", line, want)
+	}
+}
+
+func TestStatesSelectedOverridesThemeBar(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+	cfg := config.StatuslineConfig{
+		States: map[string]config.StyleConfig{"selected": {BG: "#123456"}},
+		Left:   []config.Segment{{Type: "text", Source: "title"}},
+	}
+	rv := RowView{MR: core.MR{Title: "row"}}
+	line := Render(cfg, st, rv, 80, true)
+	if !strings.Contains(line, "#123456") && !strings.Contains(line, "18;52;86") {
+		// lipgloss renders hex as 24-bit "38/48;2;R;G;B"; accept either encoding.
+		t.Errorf("selected state style not applied: %q", line)
+	}
+}

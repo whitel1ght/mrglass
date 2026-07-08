@@ -24,17 +24,28 @@ type RowView struct {
 // selected row gets a background bar that the segment foregrounds render over.
 func Render(cfg config.StatuslineConfig, st theme.Styles, rv RowView, width int, selected bool) string {
 	env := exprEnv(rv)
-	left := renderGroup(cfg.Left, st, rv, env, st.Base)
-	right := renderGroup(cfg.Right, st, rv, env, st.Base)
+
+	// Row-state overrides from config. "ci_failed" replaces the BASE style
+	// (plain text like the title) so the whole row reads as failed; semantic
+	// segment colors (the ci symbol itself, approvals) are unaffected.
+	base := st.Base
+	if rv.MR.CI == "failed" {
+		if sc, ok := cfg.States["ci_failed"]; ok {
+			base = theme.StyleFrom(sc)
+		}
+	}
+
+	left := renderGroup(cfg.Left, st, rv, env, base)
+	right := renderGroup(cfg.Right, st, rv, env, base)
 
 	// A grow segment absorbs width pressure: when the row would overflow the
 	// terminal, re-render its group with the grow segment shrunk by the
 	// overflow (floor 4 runes) so the row fits instead of wrapping.
 	if over := lipgloss.Width(left) + 1 + lipgloss.Width(right) - width; over > 0 {
 		if segs, i := findGrow(cfg.Left, env); i >= 0 {
-			left = renderShrunk(segs, i, over, st, rv, env, st.Base)
+			left = renderShrunk(segs, i, over, st, rv, env, base)
 		} else if segs, i := findGrow(cfg.Right, env); i >= 0 {
-			right = renderShrunk(segs, i, over, st, rv, env, st.Base)
+			right = renderShrunk(segs, i, over, st, rv, env, base)
 		}
 	}
 
@@ -46,7 +57,12 @@ func Render(cfg config.StatuslineConfig, st theme.Styles, rv RowView, width int,
 	if selected {
 		// Wrap the already-colored line in the selection background. The
 		// per-segment foregrounds are baked in; this adds the bar behind them.
-		return st.Selected.Render(line)
+		// "selected" replaces the theme's selection bar when configured.
+		sel := st.Selected
+		if sc, ok := cfg.States["selected"]; ok {
+			sel = theme.StyleFrom(sc)
+		}
+		return sel.Render(line)
 	}
 	return line
 }

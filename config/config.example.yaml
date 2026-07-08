@@ -84,6 +84,9 @@ sections:
     filter: 'role == "mine" && len(approvedBy) == 0'
 
 statusline:
+  # Row-state style overrides. Supported keys:
+  #   selected  — replaces the theme's cursor-row bar
+  #   ci_failed — restyles the row's plain text (title etc.) when CI is failed
   states:
     selected:  { bg: "#2a2a40", bold: true }
     ci_failed: { fg: "#e06c75" }
