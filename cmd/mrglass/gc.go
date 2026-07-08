@@ -74,6 +74,8 @@ func runGC(cfg config.Config, p provider.Provider, me string, dryRun bool, in io
 
 // gcRepos lists git repos one level under projectsDir — the clones whose
 // sibling .mrglass-worktrees (or worktree.dir) may hold `w` worktrees.
+// Only real clones are scanned; gitfile-based linked worktrees are deliberately
+// excluded (their .git is a file, not a directory).
 func gcRepos(cfg config.Config) []string {
 	root := expandHome(cfg.ProjectsDir)
 	if root == "" {
@@ -89,7 +91,7 @@ func gcRepos(cfg config.Config) []string {
 			continue
 		}
 		dir := filepath.Join(root, e.Name())
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		if fi, err := os.Stat(filepath.Join(dir, ".git")); err == nil && fi.IsDir() {
 			repos = append(repos, dir)
 		}
 	}
