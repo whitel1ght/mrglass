@@ -92,12 +92,7 @@ func (p *GitLabProvider) List(me string, days int, ticketPattern string) ([]core
 			}
 		}
 	}
-	result := make([]core.MR, 0, len(found))
-	for _, mr := range found {
-		mr = p.enrich(mr)
-		result = append(result, mr)
-	}
-	return result, nil
+	return provider.EnrichAll(found, 4, p.enrich), nil
 }
 
 func (p *GitLabProvider) enrich(mr core.MR) core.MR {

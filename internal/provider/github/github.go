@@ -121,12 +121,9 @@ func (p *GitHubProvider) List(me string, days int, ticketPattern string) ([]core
 		}
 	}
 
-	result := make([]core.MR, 0, len(found))
-	for _, mr := range found {
-		mr = p.enrich(mr, me, ticketPattern)
-		result = append(result, mr)
-	}
-	return result, nil
+	return provider.EnrichAll(found, 4, func(mr core.MR) core.MR {
+		return p.enrich(mr, me, ticketPattern)
+	}), nil
 }
 
 // enrich fetches per-PR detail (branches, approvals, CI, conflicts, reviewers)

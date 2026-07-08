@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ const pat = `([A-Z][A-Z0-9]+-\d+)`
 // fakeRunner returns canned bytes per gh subcommand and records the args of the
 // search queries so we can assert the 3-bucket flags. No network.
 type fakeRunner struct {
+	mu      sync.Mutex
 	search  []byte
 	prview  []byte
 	user    []byte
@@ -26,6 +28,8 @@ type fakeRunner struct {
 }
 
 func (f *fakeRunner) Run(args ...string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, args)
 	switch {
 	case len(args) >= 1 && args[0] == "api":
