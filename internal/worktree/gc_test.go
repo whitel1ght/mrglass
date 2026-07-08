@@ -100,6 +100,70 @@ func TestRemovable(t *testing.T) {
 	}
 }
 
+func TestListGCGitErrorCountsAsDirty(t *testing.T) {
+	t.Run("status-error", func(t *testing.T) {
+		repo := "/p/api"
+		base := DefaultBase(repo)
+		wt := filepath.Join(base, "api-dirty-1")
+		porcelain := "worktree " + wt + "\nHEAD bbb\nbranch refs/heads/mrglass/api-dirty-1\n\n"
+		// omit status --porcelain key so it errors
+		g := &gcGit{out: map[string]string{
+			repo + "|worktree list --porcelain": porcelain,
+		}}
+		items, err := ListGC(g, repo, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || !items[0].Dirty {
+			t.Errorf("git error should mark dirty: %+v", items)
+		}
+	})
+	t.Run("rev-list-error", func(t *testing.T) {
+		repo := "/p/api"
+		base := DefaultBase(repo)
+		wt := filepath.Join(base, "api-dirty-2")
+		porcelain := "worktree " + wt + "\nHEAD ccc\nbranch refs/heads/mrglass/api-dirty-2\n\n"
+		// omit rev-list key so it errors
+		g := &gcGit{out: map[string]string{
+			repo + "|worktree list --porcelain": porcelain,
+			wt + "|status --porcelain":          "",
+		}}
+		items, err := ListGC(g, repo, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != 1 || !items[0].Dirty {
+			t.Errorf("git error should mark dirty: %+v", items)
+		}
+	})
+}
+
+func TestListGCSkipsDetachedAndBareEntries(t *testing.T) {
+	repo := "/p/api"
+	base := DefaultBase(repo)
+	mrglass := filepath.Join(base, "api-normal")
+	porcelain := "worktree " + base + "/api-detached\nHEAD abc\ndetached\n\n" +
+		"worktree " + base + "/api-bare\nbare\n\n" +
+		"worktree " + mrglass + "\nHEAD bbb\nbranch refs/heads/mrglass/api-normal\n\n"
+	g := &gcGit{out: map[string]string{
+		repo + "|worktree list --porcelain":                       porcelain,
+		mrglass + "|status --porcelain":                           "",
+		mrglass + "|rev-list --count HEAD --not --remotes=origin": "0\n",
+	}}
+	items, err := ListGC(g, repo, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// should exclude detached and bare, include only the mrglass one
+	if len(items) != 1 {
+		t.Fatalf("want 1 mrglass item (detached and bare excluded), got %v", items)
+	}
+	it := items[0]
+	if it.Slug != "api-normal" || it.Branch != "mrglass/api-normal" {
+		t.Errorf("wrong item: %+v", it)
+	}
+}
+
 func TestRemoveRunsGitCleanup(t *testing.T) {
 	g := &gcGit{out: map[string]string{
 		"/p/api|worktree remove /p/.mrglass-worktrees/api-2": "",
