@@ -27,6 +27,17 @@ func Render(cfg config.StatuslineConfig, st theme.Styles, rv RowView, width int,
 	left := renderGroup(cfg.Left, st, rv, env, st.Base)
 	right := renderGroup(cfg.Right, st, rv, env, st.Base)
 
+	// A grow segment absorbs width pressure: when the row would overflow the
+	// terminal, re-render its group with the grow segment shrunk by the
+	// overflow (floor 4 runes) so the row fits instead of wrapping.
+	if over := lipgloss.Width(left) + 1 + lipgloss.Width(right) - width; over > 0 {
+		if segs, i := findGrow(cfg.Left); i >= 0 {
+			left = renderShrunk(segs, i, over, st, rv, env, st.Base)
+		} else if segs, i := findGrow(cfg.Right); i >= 0 {
+			right = renderShrunk(segs, i, over, st, rv, env, st.Base)
+		}
+	}
+
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1
@@ -53,6 +64,46 @@ func renderGroup(segs []config.Segment, st theme.Styles, rv RowView, env map[str
 	return strings.Join(parts, " ")
 }
 
+// findGrow returns the segments and the index of the first Grow segment, or -1.
+func findGrow(segs []config.Segment) ([]config.Segment, int) {
+	for i, s := range segs {
+		if s.Grow {
+			return segs, i
+		}
+	}
+	return nil, -1
+}
+
+// renderShrunk re-renders a group with segment i's MaxWidth reduced by over.
+func renderShrunk(segs []config.Segment, i, over int, st theme.Styles, rv RowView, env map[string]any, base lipgloss.Style) string {
+	s := segs[i]
+	cur := lipgloss.Width(renderSegment(s, st, rv, base))
+	newMax := cur - over
+	if newMax < 4 {
+		newMax = 4
+	}
+	s.MaxWidth = newMax
+	out := make([]config.Segment, len(segs))
+	copy(out, segs)
+	out[i] = s
+	return renderGroup(out, st, rv, env, base)
+}
+
+// truncate cuts s to max runes, ending with … when cut. max <= 0 means no limit.
+func truncate(s string, max int) string {
+	if max <= 0 {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	if max == 1 {
+		return "…"
+	}
+	return string(r[:max-1]) + "…"
+}
+
 // renderSegment produces the (already-styled) text for one segment. A built-in
 // semantic style is chosen from the theme by segment type/value; an explicit
 // per-segment config Style/Styles override is applied on top when present.
@@ -71,12 +122,7 @@ func renderSegment(s config.Segment, st theme.Styles, rv RowView, base lipgloss.
 			text, style = "○", st.Subtle
 		}
 	case "text":
-		text = fieldString(s.Source, mr)
-		if s.MaxWidth > 0 {
-			if r := []rune(text); len(r) > s.MaxWidth {
-				text = string(r[:s.MaxWidth-1]) + "…"
-			}
-		}
+		text = truncate(fieldString(s.Source, mr), s.MaxWidth)
 		style = base
 	case "ci":
 		if sym, ok := s.Symbols[mr.CI]; ok {

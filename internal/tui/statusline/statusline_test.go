@@ -3,6 +3,7 @@ package statusline
 import (
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
@@ -138,6 +139,26 @@ func TestSegmentStyleNameHonored(t *testing.T) {
 	want := st.Danger.Inline(true).Render("hello")
 	if got != want {
 		t.Errorf("style name not honored:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestGrowSegmentAbsorbsOverflow(t *testing.T) {
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+	cfg := config.StatuslineConfig{
+		Left:  []config.Segment{{Type: "text", Source: "title", Grow: true, MaxWidth: 60}},
+		Right: []config.Segment{{Type: "age"}},
+	}
+	rv := RowView{MR: core.MR{
+		Title:     strings.Repeat("long title ", 10),
+		UpdatedAt: time.Now().Add(-2 * time.Hour),
+	}}
+	const width = 40
+	line := Render(cfg, st, rv, width, false)
+	if w := lipgloss.Width(line); w > width {
+		t.Errorf("row width %d exceeds terminal width %d", w, width)
+	}
+	if !strings.Contains(line, "…") {
+		t.Error("grow segment should be truncated with an ellipsis")
 	}
 }
 
