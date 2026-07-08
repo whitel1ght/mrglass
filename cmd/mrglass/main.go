@@ -27,6 +27,8 @@ func main() {
 		statePath   = flag.String("state", ".mrglass-state.json", "path to snapshot state file")
 		noTriage    = flag.Bool("no-triage", false, "disable Claude triage entirely")
 		noReview    = flag.Bool("no-review", false, "disable the Claude MR-review hotkey")
+		gcFlag      = flag.Bool("gc", false, "remove worktrees of merged/closed MRs (with confirmation) and exit")
+		dryRun      = flag.Bool("dry-run", false, "with --gc: print what would be removed, remove nothing")
 	)
 	flag.Parse()
 
@@ -63,6 +65,14 @@ func main() {
 				"Run `%s auth status`, then `%s auth login` if needed.\n",
 			cfg.Forge, cliName, cliName, cliName)
 		os.Exit(1)
+	}
+
+	if *gcFlag {
+		if err := runGC(cfg, p, me, *dryRun, os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "gc:", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	var az analyze.Analyzer
