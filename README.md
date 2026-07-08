@@ -52,6 +52,7 @@ go build -o mrglass ./cmd/mrglass
 mrglass              # opens the dashboard
 mrglass --version
 mrglass --config /path/to/config.yaml
+mrglass --gc         # clean up worktrees of merged/closed MRs (add --dry-run to preview)
 ```
 
 It runs with **no config file** (sensible defaults, GitLab). To customize, create
@@ -122,6 +123,10 @@ worktree:
 ```
 
 Presets for iTerm, Terminal, kitty, and wezterm are in the example config.
+
+Worktrees persist so you can return to them; when their MRs are merged or
+closed, reclaim them with `mrglass --gc` (dirty worktrees — uncommitted or
+unpushed work — are never removed).
 
 ### Sections, statusline, theme
 
