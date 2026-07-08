@@ -3,6 +3,7 @@ package core
 import (
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -91,12 +92,33 @@ func TicketURL(urlTemplate, key string) string {
 	return strings.ReplaceAll(urlTemplate, "{key}", key)
 }
 
+// ticketRes caches compiled ticket patterns; ParseTicket runs per-MR per-refresh
+// and the pattern almost never changes.
+var ticketRes sync.Map // pattern string -> *regexp.Regexp
+
+func ticketRe(pattern string) (*regexp.Regexp, bool) {
+	if v, ok := ticketRes.Load(pattern); ok {
+		return v.(*regexp.Regexp), true
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, false
+	}
+	ticketRes.Store(pattern, re)
+	return re, true
+}
+
 // ParseTicket extracts a ticket key from the title, then the branch, upper-cased.
-// Returns "Other" when neither matches.
+// Returns "Other" when neither matches, and also when the pattern is invalid or
+// has no capture group (config validation warns about those; this is the
+// belt-and-suspenders guard so a bad pattern can never panic the dashboard).
 func ParseTicket(title, branch, pattern string) string {
-	re := regexp.MustCompile(pattern)
+	re, ok := ticketRe(pattern)
+	if !ok {
+		return "Other"
+	}
 	for _, s := range []string{title, branch} {
-		if m := re.FindStringSubmatch(s); m != nil {
+		if m := re.FindStringSubmatch(s); len(m) > 1 {
 			return strings.ToUpper(m[1])
 		}
 	}

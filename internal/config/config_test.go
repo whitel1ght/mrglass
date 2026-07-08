@@ -120,3 +120,39 @@ func TestNewTicketsConfigNotOverriddenByMigration(t *testing.T) {
 		t.Errorf("explicit tickets.urlTemplate must win, got %q", c.Tickets.URLTemplate)
 	}
 }
+
+func TestLoadInvalidTicketRegexFallsBackWithWarning(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("ticketRegex: '([A-Z'"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warns := Load(path)
+	if cfg.TicketRegex != Default().TicketRegex {
+		t.Errorf("bad regex should fall back to default, got %q", cfg.TicketRegex)
+	}
+	found := false
+	for _, w := range warns {
+		if strings.Contains(w, "ticketRegex") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected a ticketRegex warning, got %v", warns)
+	}
+}
+
+func TestLoadGrouplessTicketRegexFallsBackWithWarning(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(`ticketRegex: '[A-Z]+-\d+'`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warns := Load(path)
+	if cfg.TicketRegex != Default().TicketRegex {
+		t.Errorf("group-less regex should fall back to default, got %q", cfg.TicketRegex)
+	}
+	if len(warns) == 0 {
+		t.Error("expected a warning")
+	}
+}

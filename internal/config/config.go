@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -199,6 +200,15 @@ func (c *Config) normalize() []string {
 	default:
 		warns = append(warns, fmt.Sprintf("unknown forge %q; falling back to %q", c.Forge, ForgeGitLab))
 		c.Forge = ForgeGitLab
+	}
+
+	// ticketRegex: must compile and have a capture group (ParseTicket uses m[1]).
+	if re, err := regexp.Compile(c.TicketRegex); err != nil {
+		warns = append(warns, fmt.Sprintf("invalid ticketRegex %q: %v; using default", c.TicketRegex, err))
+		c.TicketRegex = Default().TicketRegex
+	} else if re.NumSubexp() < 1 {
+		warns = append(warns, fmt.Sprintf("ticketRegex %q has no capture group; using default", c.TicketRegex))
+		c.TicketRegex = Default().TicketRegex
 	}
 
 	// Migrate legacy jira.baseURL → tickets.* when tickets isn't configured.

@@ -73,3 +73,17 @@ func TestTicketURL(t *testing.T) {
 		}
 	}
 }
+
+func TestParseTicketInvalidPatternReturnsOther(t *testing.T) {
+	// An unclosed group must not panic.
+	if got := ParseTicket("PROJ-1 fix", "b", `([A-Z]+-\d+`); got != "Other" {
+		t.Errorf("invalid pattern: got %q, want Other", got)
+	}
+}
+
+func TestParseTicketPatternWithoutGroupReturnsOther(t *testing.T) {
+	// A pattern with no capture group must not panic on m[1].
+	if got := ParseTicket("PROJ-1 fix", "b", `[A-Z]+-\d+`); got != "Other" {
+		t.Errorf("group-less pattern: got %q, want Other", got)
+	}
+}
