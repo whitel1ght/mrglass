@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/whitel1ght/mrglass/internal/core"
 )
@@ -36,11 +37,18 @@ func TestEnrichAllBoundsConcurrency(t *testing.T) {
 	for _, r := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 		found[r] = core.MR{Ref: r}
 	}
+	const limit = 2
 	var inFlight, peak atomic.Int32
 	gate := make(chan struct{})
+	// Buffered for every MR, not just `limit`: every enrich call signals
+	// entry, and once `gate` closes all 8 goroutines run enrich and send
+	// here. A cap of `limit` would let goroutines beyond the first two
+	// block on this send forever, since the test only ever drains `limit`
+	// signals.
+	started := make(chan struct{}, len(found))
 	out := make(chan []core.MR, 1)
 	go func() {
-		out <- EnrichAll(found, 2, func(mr core.MR) core.MR {
+		out <- EnrichAll(found, limit, func(mr core.MR) core.MR {
 			n := inFlight.Add(1)
 			for {
 				p := peak.Load()
@@ -48,17 +56,31 @@ func TestEnrichAllBoundsConcurrency(t *testing.T) {
 					break
 				}
 			}
+			started <- struct{}{}
 			<-gate
 			inFlight.Add(-1)
 			return mr
 		})
 	}()
+	// Wait for exactly `limit` concurrent calls to have entered before
+	// releasing the gate, so peak is deterministically driven to the
+	// bound rather than depending on scheduler timing. A serialized
+	// implementation can never deliver the second signal (its lone
+	// goroutine is parked on <-gate before a second one starts), so this
+	// times out instead of hanging forever.
+	for i := 0; i < limit; i++ {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for %d concurrent enrich calls to start (got %d)", limit, i)
+		}
+	}
 	close(gate) // release everyone; peak was recorded on entry
 	if got := <-out; len(got) != 8 {
 		t.Fatalf("want 8 results, got %d", len(got))
 	}
-	if p := peak.Load(); p > 2 {
-		t.Errorf("concurrency peaked at %d, limit was 2", p)
+	if p := peak.Load(); p != 2 {
+		t.Errorf("concurrency peaked at %d, want exactly %d", p, limit)
 	}
 }
 
