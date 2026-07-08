@@ -208,7 +208,7 @@ func TestSkillReviewWithWorktreeDrivesItself(t *testing.T) {
 {"type":"result","is_error":false,"result":"deep review"}`
 	f := &fakeCmd{out: []byte(stream)}
 	(ClaudeReviewer{R: f}).Review(ReviewReq{
-		MR: core.MR{Ref: "acme/infra/api!288", IID: 288, Title: "t"},
+		MR:   core.MR{Ref: "acme/infra/api!288", IID: 288, Title: "t"},
 		Diff: "PRE-PASTED DIFF SHOULD NOT APPEAR", Prompt: "p",
 		Skill: "claude-components:mr-review", Dir: "/tmp/wt",
 	})

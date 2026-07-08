@@ -63,9 +63,9 @@ func TestTicketURL(t *testing.T) {
 		{"https://linear.app/acme/issue/{key}", "ENG-12", "https://linear.app/acme/issue/ENG-12"},
 		// GitHub issues
 		{"https://github.com/acme/repo/issues/{key}", "42", "https://github.com/acme/repo/issues/42"},
-		{"", "PROJ-1", ""},                                // no template -> nothing
-		{"https://x/browse/{key}", "", ""},                // no key -> nothing
-		{"https://x/browse/{key}", "Other", ""},           // "Other" = no ticket
+		{"", "PROJ-1", ""},                      // no template -> nothing
+		{"https://x/browse/{key}", "", ""},      // no key -> nothing
+		{"https://x/browse/{key}", "Other", ""}, // "Other" = no ticket
 	}
 	for _, c := range cases {
 		if got := TicketURL(c.tmpl, c.key); got != c.want {

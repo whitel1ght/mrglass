@@ -1,8 +1,12 @@
 package main
+
 import (
-	"os";"path/filepath";"testing"
+	"os"
+	"path/filepath"
+	"testing"
 )
-func TestDefaultConfigPathPrefersXDG(t *testing.T){
+
+func TestDefaultConfigPathPrefersXDG(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	want := filepath.Join(tmp, "mrglass", "config.yaml")
@@ -12,7 +16,7 @@ func TestDefaultConfigPathPrefersXDG(t *testing.T){
 		t.Errorf("got %q, want XDG path %q", got, want)
 	}
 }
-func TestDefaultConfigPathFallsBackToCreatePath(t *testing.T){
+func TestDefaultConfigPathFallsBackToCreatePath(t *testing.T) {
 	// nothing exists -> returns the first (preferred) candidate to create
 	t.Setenv("XDG_CONFIG_HOME", "")
 	got := defaultConfigPath()

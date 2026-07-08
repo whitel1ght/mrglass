@@ -41,15 +41,15 @@ type MR struct {
 	Role      Role
 	Reviewers []string
 
-	CI          string
-	PipelineURL string
-	ApprovedBy         []string
-	ApprovalsRequired  int      // number of approvals GitLab requires (0 = none required)
-	Conflicts          bool
-	Unresolved  bool
-	Comments    int
-	Draft       bool
-	MergeStatus string
+	CI                string
+	PipelineURL       string
+	ApprovedBy        []string
+	ApprovalsRequired int // number of approvals GitLab requires (0 = none required)
+	Conflicts         bool
+	Unresolved        bool
+	Comments          int
+	Draft             bool
+	MergeStatus       string
 
 	UpdatedAt time.Time
 	TicketKey string

@@ -153,8 +153,6 @@ func (p *GitHubProvider) enrich(mr core.MR, me, ticketPattern string) core.MR {
 	return applyEnrich(mr, pv, me, ticketPattern)
 }
 
-// MRDiff returns the unified diff for a PR via `gh pr diff`.
-//
 // MRDiff returns the PR's diff via `gh pr diff`. Implements review.ReviewForge —
 // it takes the whole core.MR and parses owner/repo#number from the Ref.
 func (p *GitHubProvider) MRDiff(mr core.MR) (string, error) {
@@ -304,8 +302,6 @@ func splitRef(ref string) (repo string, number int, ok bool) {
 	}
 	return ref[:i], n, true
 }
-
-var _ = core.MR{} // ensure core import used even if signatures change
 
 // compile-time check
 var _ provider.Provider = (*GitHubProvider)(nil)

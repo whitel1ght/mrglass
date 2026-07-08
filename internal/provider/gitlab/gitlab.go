@@ -184,12 +184,6 @@ func parseApprovals(raw []byte) (approvers []string, required int, err error) {
 	return out, a.ApprovalsRequired, nil
 }
 
-// parseApprovers is a thin wrapper kept for backward compatibility.
-func parseApprovers(raw []byte) ([]string, error) {
-	approvers, _, err := parseApprovals(raw)
-	return approvers, err
-}
-
 func toMR(rm rawMR, me, ticketPattern string) core.MR {
 	head := rm.HeadPipeline
 	if head == nil {
@@ -237,8 +231,6 @@ func toMR(rm rawMR, me, ticketPattern string) core.MR {
 		TicketKey:    core.ParseTicket(rm.Title, rm.SourceBranch, ticketPattern),
 	}
 }
-
-var _ = core.MR{} // ensure core import used even if signatures change
 
 // compile-time check
 var _ provider.Provider = (*GitLabProvider)(nil)

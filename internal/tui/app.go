@@ -21,13 +21,13 @@ import (
 	"github.com/whitel1ght/mrglass/internal/jira"
 	"github.com/whitel1ght/mrglass/internal/provider"
 	"github.com/whitel1ght/mrglass/internal/review"
-	"github.com/whitel1ght/mrglass/internal/worktree"
 	"github.com/whitel1ght/mrglass/internal/tui/detailpane"
 	"github.com/whitel1ght/mrglass/internal/tui/keys"
 	"github.com/whitel1ght/mrglass/internal/tui/section"
 	"github.com/whitel1ght/mrglass/internal/tui/statusline"
 	"github.com/whitel1ght/mrglass/internal/tui/theme"
 	"github.com/whitel1ght/mrglass/internal/watch"
+	"github.com/whitel1ght/mrglass/internal/worktree"
 )
 
 type fetchResultMsg watch.FetchResult
@@ -79,9 +79,9 @@ type Model struct {
 	expanded   map[string]bool // MR ref -> inline detail shown
 	advice     map[string]string
 
-	pendingReview *pending      // non-nil while awaiting post/discard confirmation
+	pendingReview *pending       // non-nil while awaiting post/discard confirmation
 	reviewVP      viewport.Model // scrollable view of the pending review
-	reviewing     bool          // a review is in flight
+	reviewing     bool           // a review is in flight
 
 	jira      jira.Client // nil when Jira isn't configured
 	jiraNote  string      // when jira is nil but status was REQUESTED: why it's off
@@ -773,4 +773,3 @@ func (m Model) View() string {
 
 	return strings.Join([]string{tabBar, body, status, helpBar}, "\n")
 }
-

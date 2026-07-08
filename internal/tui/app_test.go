@@ -606,9 +606,9 @@ func TestOpenTicketOpens(t *testing.T) {
 
 // fakeJira implements jira.Client for tests.
 type fakeJira struct {
-	t      jiraPkg.Ticket
-	err    error
-	calls  int
+	t       jiraPkg.Ticket
+	err     error
+	calls   int
 	lastKey string
 }
 
@@ -661,7 +661,7 @@ func TestExpandDoesNotRefetchCachedTicket(t *testing.T) {
 	m, _ = update(m, jiraMsg{key: "PROJ-1234", ticket: fj.t}) // cache it
 	callsAfterFirst := fj.calls
 	// collapse + re-expand -> must NOT refetch (cached & fresh)
-	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEnter}) // collapse
+	m, _ = update(m, tea.KeyMsg{Type: tea.KeyEnter})     // collapse
 	_, cmd2 := update(m, tea.KeyMsg{Type: tea.KeyEnter}) // re-expand
 	if cmd2 != nil {
 		t.Error("re-expanding a cached, fresh ticket must not refetch")
@@ -713,7 +713,7 @@ func TestJiraDisabledShowsReasonOnExpand(t *testing.T) {
 	if cmd != nil {
 		t.Error("disabled jira must not issue a fetch on expand")
 	}
-	m2, _ := update(m, tea.KeyMsg{Type: tea.KeyEnter}) // collapse
+	m2, _ := update(m, tea.KeyMsg{Type: tea.KeyEnter})  // collapse
 	m3, _ := update(m2, tea.KeyMsg{Type: tea.KeyEnter}) // expand again
 	v := m3.View()
 	if !strings.Contains(v, "PROJ-1234") || !strings.Contains(v, "JIRA_EMAIL") {
