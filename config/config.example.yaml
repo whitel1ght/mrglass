@@ -100,4 +100,4 @@ statusline:
     - { type: approvals }
     - { type: comments, when: 'comments > 0', format: "💬{comments}" }
     - { type: advice, when: 'hasAdvice', text: "💡" }
-    - { type: age, source: updatedAt, align: right, style: faint }
+    - { type: age, source: updatedAt, style: faint }

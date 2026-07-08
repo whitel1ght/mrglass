@@ -129,3 +129,25 @@ func TestRenderTruncatesMultibyteTitleSafely(t *testing.T) {
 		t.Errorf("truncated title should contain ellipsis: %q", out)
 	}
 }
+
+func TestSegmentStyleNameHonored(t *testing.T) {
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+	seg := config.Segment{Type: "text", Source: "title", Style: "danger"}
+	rv := RowView{MR: core.MR{Title: "hello"}}
+	got := renderSegment(seg, st, rv, st.Base)
+	want := st.Danger.Inline(true).Render("hello")
+	if got != want {
+		t.Errorf("style name not honored:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestSegmentUnknownStyleNameKeepsDefault(t *testing.T) {
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+	seg := config.Segment{Type: "text", Source: "title", Style: "nope"}
+	rv := RowView{MR: core.MR{Title: "hello"}}
+	got := renderSegment(seg, st, rv, st.Base)
+	want := st.Base.Inline(true).Render("hello")
+	if got != want {
+		t.Errorf("unknown style should keep default:\n got %q\nwant %q", got, want)
+	}
+}

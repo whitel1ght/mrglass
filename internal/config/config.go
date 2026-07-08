@@ -22,7 +22,6 @@ type Segment struct {
 	When     string                 `yaml:"when"`
 	Format   string                 `yaml:"format"`
 	Text     string                 `yaml:"text"`
-	Align    string                 `yaml:"align"`
 	Style    string                 `yaml:"style"`
 	Grow     bool                   `yaml:"grow"`
 	MaxWidth int                    `yaml:"maxWidth"`
@@ -159,7 +158,7 @@ func Default() Config {
 				{Type: "approvals"},
 				{Type: "comments", When: "comments > 0", Format: "💬{comments}"},
 				{Type: "advice", When: "hasAdvice", Text: "💡"},
-				{Type: "age", Source: "updatedAt", Align: "right", Style: "faint"},
+				{Type: "age", Source: "updatedAt", Style: "faint"},
 			},
 		},
 	}

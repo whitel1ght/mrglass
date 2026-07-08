@@ -24,8 +24,8 @@ type RowView struct {
 // selected row gets a background bar that the segment foregrounds render over.
 func Render(cfg config.StatuslineConfig, st theme.Styles, rv RowView, width int, selected bool) string {
 	env := exprEnv(rv)
-	left := renderGroup(cfg.Left, st, rv, env)
-	right := renderGroup(cfg.Right, st, rv, env)
+	left := renderGroup(cfg.Left, st, rv, env, st.Base)
+	right := renderGroup(cfg.Right, st, rv, env, st.Base)
 
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
@@ -40,13 +40,13 @@ func Render(cfg config.StatuslineConfig, st theme.Styles, rv RowView, width int,
 	return line
 }
 
-func renderGroup(segs []config.Segment, st theme.Styles, rv RowView, env map[string]any) string {
+func renderGroup(segs []config.Segment, st theme.Styles, rv RowView, env map[string]any, base lipgloss.Style) string {
 	var parts []string
 	for _, s := range segs {
 		if s.When != "" && !evalBool(s.When, env) {
 			continue
 		}
-		if txt := renderSegment(s, st, rv); txt != "" {
+		if txt := renderSegment(s, st, rv, base); txt != "" {
 			parts = append(parts, txt)
 		}
 	}
@@ -56,10 +56,10 @@ func renderGroup(segs []config.Segment, st theme.Styles, rv RowView, env map[str
 // renderSegment produces the (already-styled) text for one segment. A built-in
 // semantic style is chosen from the theme by segment type/value; an explicit
 // per-segment config Style/Styles override is applied on top when present.
-func renderSegment(s config.Segment, st theme.Styles, rv RowView) string {
+func renderSegment(s config.Segment, st theme.Styles, rv RowView, base lipgloss.Style) string {
 	mr := rv.MR
 	var text string
-	style := st.Base // default foreground
+	style := base // default foreground
 
 	switch s.Type {
 	case "marker":
@@ -77,7 +77,7 @@ func renderSegment(s config.Segment, st theme.Styles, rv RowView) string {
 				text = string(r[:s.MaxWidth-1]) + "…"
 			}
 		}
-		style = st.Base
+		style = base
 	case "ci":
 		if sym, ok := s.Symbols[mr.CI]; ok {
 			text = sym
@@ -101,7 +101,7 @@ func renderSegment(s config.Segment, st theme.Styles, rv RowView) string {
 		}
 	case "comments":
 		text = strings.ReplaceAll(s.Format, "{comments}", fmt.Sprint(mr.Comments))
-		style = st.Base
+		style = base
 	case "advice":
 		if !rv.HasAdvice {
 			return ""
@@ -117,7 +117,7 @@ func renderSegment(s config.Segment, st theme.Styles, rv RowView) string {
 		return ""
 	}
 	// Explicit per-segment config style wins over the semantic default.
-	if override, ok := configStyle(s, mr); ok {
+	if override, ok := configStyle(s, st, mr); ok {
 		style = override
 	}
 	return style.Inline(true).Render(text)
@@ -137,14 +137,41 @@ func ciStyle(st theme.Styles, status string) lipgloss.Style {
 	}
 }
 
-// configStyle returns an explicit per-segment style from config, if any. A
-// segment may carry a single Style name or a per-value Styles map (keyed, for
-// ci, by status). Returns ok=false when no override applies.
-func configStyle(s config.Segment, mr core.MR) (lipgloss.Style, bool) {
+// configStyle returns an explicit per-segment style from config, if any.
+// Precedence: per-value Styles map (ci, keyed by status) → named Style →
+// none. Unknown style names are ignored (semantic default kept) — config
+// mistakes must never break rendering.
+func configStyle(s config.Segment, st theme.Styles, mr core.MR) (lipgloss.Style, bool) {
 	if s.Type == "ci" && len(s.Styles) > 0 {
 		if sc, ok := s.Styles[mr.CI]; ok {
 			return theme.StyleFrom(sc), true
 		}
+	}
+	if s.Style != "" {
+		return namedStyle(st, s.Style)
+	}
+	return lipgloss.Style{}, false
+}
+
+// namedStyle resolves a config style name to a theme style.
+func namedStyle(st theme.Styles, name string) (lipgloss.Style, bool) {
+	switch name {
+	case "base":
+		return st.Base, true
+	case "subtle":
+		return st.Subtle, true
+	case "faint":
+		return st.Subtle.Faint(true), true
+	case "accent":
+		return st.Accent, true
+	case "success":
+		return st.Success, true
+	case "warn":
+		return st.Warn, true
+	case "danger":
+		return st.Danger, true
+	case "advice":
+		return st.Advice, true
 	}
 	return lipgloss.Style{}, false
 }
