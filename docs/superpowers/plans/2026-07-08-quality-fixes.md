@@ -1325,19 +1325,142 @@ git commit -m "perf(tui): cache compiled expr programs; fix section filters seei
 
 ---
 
-### Task 10: Concurrent per-MR enrichment (both providers)
+### Task 10: Concurrent per-MR enrichment via shared EnrichAll
 
 **Files:**
+- Create: `internal/provider/enrich.go`
+- Create: `internal/provider/enrich_test.go`
 - Modify: `internal/provider/gitlab/gitlab.go` (List)
 - Modify: `internal/provider/github/github.go` (List)
 - Modify: `internal/provider/github/github_test.go` (fakeRunner mutex)
-- Test: `internal/provider/github/github_test.go`
 
 **Interfaces:**
-- Consumes: existing `enrich` methods (unchanged).
-- Produces: `List` behavior unchanged (same results, non-fatal enrich failures), but enrich calls run on ≤4 goroutines. Fakes used with these providers MUST be goroutine-safe.
+- Consumes: existing per-provider `enrich` methods (unchanged).
+- Produces: `provider.EnrichAll(found map[string]core.MR, limit int, enrich func(core.MR) core.MR) []core.MR` — runs enrich concurrently with at most `limit` in flight and returns the enriched MRs (order unspecified, matching today's map iteration). `List` behavior otherwise unchanged. Fakes used with these providers MUST be goroutine-safe.
 
-- [ ] **Step 1: Make the GitHub fakeRunner goroutine-safe**
+- [ ] **Step 1: Write failing EnrichAll tests**
+
+Create `internal/provider/enrich_test.go`:
+
+```go
+package provider
+
+import (
+	"sync"
+	"sync/atomic"
+	"testing"
+
+	"github.com/whitel1ght/mrglass/internal/core"
+)
+
+func TestEnrichAllEnrichesEveryMR(t *testing.T) {
+	found := map[string]core.MR{
+		"a": {Ref: "a"}, "b": {Ref: "b"}, "c": {Ref: "c"},
+	}
+	var mu sync.Mutex
+	seen := map[string]bool{}
+	out := EnrichAll(found, 4, func(mr core.MR) core.MR {
+		mu.Lock()
+		seen[mr.Ref] = true
+		mu.Unlock()
+		mr.Title = "enriched"
+		return mr
+	})
+	if len(out) != 3 || len(seen) != 3 {
+		t.Fatalf("want all 3 enriched, got out=%d seen=%d", len(out), len(seen))
+	}
+	for _, mr := range out {
+		if mr.Title != "enriched" {
+			t.Errorf("%s: enrich result not kept", mr.Ref)
+		}
+	}
+}
+
+func TestEnrichAllBoundsConcurrency(t *testing.T) {
+	found := map[string]core.MR{}
+	for _, r := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+		found[r] = core.MR{Ref: r}
+	}
+	var inFlight, peak atomic.Int32
+	gate := make(chan struct{})
+	out := make(chan []core.MR, 1)
+	go func() {
+		out <- EnrichAll(found, 2, func(mr core.MR) core.MR {
+			n := inFlight.Add(1)
+			for {
+				p := peak.Load()
+				if n <= p || peak.CompareAndSwap(p, n) {
+					break
+				}
+			}
+			<-gate
+			inFlight.Add(-1)
+			return mr
+		})
+	}()
+	close(gate) // release everyone; peak was recorded on entry
+	if got := <-out; len(got) != 8 {
+		t.Fatalf("want 8 results, got %d", len(got))
+	}
+	if p := peak.Load(); p > 2 {
+		t.Errorf("concurrency peaked at %d, limit was 2", p)
+	}
+}
+
+func TestEnrichAllEmpty(t *testing.T) {
+	if out := EnrichAll(nil, 4, func(mr core.MR) core.MR { return mr }); len(out) != 0 {
+		t.Errorf("nil input should give empty output, got %v", out)
+	}
+}
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `go test ./internal/provider/ -v`
+Expected: FAIL (undefined: EnrichAll).
+
+- [ ] **Step 3: Implement EnrichAll**
+
+Create `internal/provider/enrich.go`:
+
+```go
+package provider
+
+import (
+	"sync"
+
+	"github.com/whitel1ght/mrglass/internal/core"
+)
+
+// EnrichAll runs enrich over every MR with at most limit calls in flight —
+// the per-MR detail fetch is each provider's slow path, and 3-4 concurrent
+// calls stays polite to the forge API. Result order is unspecified (callers
+// previously iterated a map). Each result index is written by exactly one
+// goroutine.
+func EnrichAll(found map[string]core.MR, limit int, enrich func(core.MR) core.MR) []core.MR {
+	result := make([]core.MR, len(found))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, limit)
+	i := 0
+	for _, mr := range found {
+		wg.Add(1)
+		go func(idx int, mr core.MR) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			result[idx] = enrich(mr)
+		}(i, mr)
+		i++
+	}
+	wg.Wait()
+	return result
+}
+```
+
+Run: `go test -race ./internal/provider/ -v`
+Expected: PASS.
+
+- [ ] **Step 4: Make the GitHub fakeRunner goroutine-safe**
 
 In `internal/provider/github/github_test.go`, the `fakeRunner` records calls; guard it (adapt names to the actual struct at github_test.go:17-39):
 
@@ -1354,11 +1477,11 @@ func (f *fakeRunner) Run(args ...string) ([]byte, error) {
 }
 ```
 
-Add `"sync"` to imports.
+Add `"sync"` to imports. Task 11's gitlab `fakeRunner` is already mutex-guarded.
 
-- [ ] **Step 2: Implement the bounded pool in both List functions**
+- [ ] **Step 5: Wire both List functions**
 
-The enrichment loop is identical in shape in both providers. In `internal/provider/gitlab/gitlab.go`, replace:
+In `internal/provider/gitlab/gitlab.go`, replace:
 
 ```go
 	result := make([]core.MR, 0, len(found))
@@ -1372,45 +1495,34 @@ The enrichment loop is identical in shape in both providers. In `internal/provid
 with:
 
 ```go
-	// Enrich concurrently — one API call per MR is the slow path. Bounded at 4
-	// in-flight to stay polite to the forge. Order within the slice is not
-	// meaningful (map iteration was already random); each index is written by
-	// exactly one goroutine.
-	result := make([]core.MR, len(found))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 4)
-	i := 0
-	for _, mr := range found {
-		wg.Add(1)
-		go func(idx int, mr core.MR) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			result[idx] = p.enrich(mr)
-		}(i, mr)
-		i++
-	}
-	wg.Wait()
-	return result, nil
+	return provider.EnrichAll(found, 4, p.enrich), nil
 ```
 
-Add `"sync"` to imports. In `internal/provider/github/github.go` do the same, with `result[idx] = p.enrich(mr, me, ticketPattern)`.
+(`provider` is already imported for the compile-time check.)
 
-- [ ] **Step 3: Run with the race detector**
+In `internal/provider/github/github.go`, same replacement with a closure over the extra args:
+
+```go
+	return provider.EnrichAll(found, 4, func(mr core.MR) core.MR {
+		return p.enrich(mr, me, ticketPattern)
+	}), nil
+```
+
+- [ ] **Step 6: Run with the race detector**
 
 Run: `go test -race ./internal/provider/... -v`
 Expected: PASS, no race reports. The existing `TestListThreeBucketsAndDedupe` and `TestEnrichCarriesApprovalsFailure` cover behavior; `-race` covers the new concurrency.
 
-- [ ] **Step 4: Run full suite**
+- [ ] **Step 7: Run full suite**
 
 Run: `go test -race ./...`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add internal/provider/
-git commit -m "perf(provider): enrich MRs concurrently (bounded at 4 in-flight)"
+git commit -m "perf(provider): enrich MRs concurrently via shared EnrichAll (bounded)"
 ```
 
 ---
