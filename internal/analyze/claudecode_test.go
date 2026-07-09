@@ -46,10 +46,15 @@ func TestTriageHappyPath(t *testing.T) {
 	}
 	// uses read-only, headless, json flags
 	joined := strings.Join(f.args, " ")
-	for _, want := range []string{"-p", "--output-format", "json", "--allowedTools", "--bare"} {
+	for _, want := range []string{"-p", "--output-format", "json", "--allowedTools"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("args %q missing %q", joined, want)
 		}
+	}
+	// --bare skips claude's plugin/config init, which also skips auth loading —
+	// every triage then fails with "Not logged in". It must never be passed.
+	if strings.Contains(joined, "--bare") {
+		t.Errorf("args %q must not include --bare (breaks auth in headless mode)", joined)
 	}
 }
 

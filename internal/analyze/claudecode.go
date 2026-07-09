@@ -43,11 +43,13 @@ func Available() bool {
 
 func (cc ClaudeCode) Triage(c core.Change) Advice {
 	prompt := buildPrompt(c)
+	// NOTE: no --bare here. Bare mode skips claude's plugin/config init, which
+	// also skips credential loading — every call then fails with "Not logged
+	// in" even when the user's interactive claude works fine.
 	out, err := cc.R.Run("",
 		"-p", prompt,
 		"--output-format", "json",
 		"--allowedTools", "Read",
-		"--bare",
 	)
 	if err != nil {
 		return Advice{Ref: c.Ref, Err: err}

@@ -436,7 +436,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case adviceMsg:
 		a := analyze.Advice(msg)
 		delete(m.busy, "triage:"+a.Ref)
-		if a.Err == nil && a.Text != "" {
+		if a.Err != nil {
+			// Surface the failure — a silently-dropped error looks like the
+			// triage did nothing at all.
+			m.status = "⚠ triage " + a.Ref + " failed: " + a.Err.Error()
+			return m, nil
+		}
+		if a.Text != "" {
 			m.advice[a.Ref] = a.Text
 		}
 		return m, nil

@@ -857,3 +857,13 @@ func TestSpinnerTickStopsWhenIdle(t *testing.T) {
 		t.Error("spinner ticks while busy should reschedule to keep animating")
 	}
 }
+
+func TestTriageErrorSurfacedInStatus(t *testing.T) {
+	m, _ := reviewModel(t)
+	u, _ := m.Update(adviceMsg(analyze.Advice{Ref: "g/p!1", Err: errors.New("claude: Not logged in")}))
+	m = u.(Model)
+	view := m.View()
+	if !strings.Contains(view, "triage") || !strings.Contains(view, "Not logged in") {
+		t.Errorf("a failed triage must be visible in the status footer, got:\n%s", view)
+	}
+}
