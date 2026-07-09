@@ -776,3 +776,19 @@ func TestOpenWorkNoLocalClone(t *testing.T) {
 		t.Errorf("status should note no local clone, got %q", u2.(Model).status)
 	}
 }
+
+func TestViewHasBlankLineBelowTabs(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 80, 24
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("view too short: %q", lines)
+	}
+	if strings.TrimSpace(lines[1]) != "" {
+		t.Errorf("line below the tab bar should be empty for separation, got %q", lines[1])
+	}
+	// The view must still fill exactly the terminal height.
+	if len(lines) != 24 {
+		t.Errorf("view height %d, want %d", len(lines), 24)
+	}
+}

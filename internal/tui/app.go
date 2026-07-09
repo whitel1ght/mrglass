@@ -714,7 +714,9 @@ func (m Model) View() string {
 		}
 		tabs = append(tabs, label)
 	}
-	tabBar := strings.Join(tabs, " ")
+	// Trailing newline = one blank separator line between the tabs and the
+	// list; chrome accounts for it automatically via lipgloss.Height(tabBar).
+	tabBar := strings.Join(tabs, " ") + "\n"
 
 	// Full-width list. Each MR is one line, prefixed with a disclosure marker
 	// (▸ collapsed / ▾ expanded). An expanded MR shows its detail indented
