@@ -94,6 +94,9 @@ statusline:
     # Role (mine vs. to-review) is conveyed by the active tab, so there's no
     # per-row role marker by default. Add `- { type: marker }` to bring it back
     # (● = authored by you, ○ = assigned/review-requested).
+    # grow: the segment fills the row's free width — expanding on wide
+    # terminals, shrinking on narrow ones. maxWidth does not cap a grow
+    # segment (it only limits plain, non-grow text segments).
     - { type: text, source: title, grow: true, maxWidth: 60 }
   right:
     - { type: ci, when: 'ci != ""',

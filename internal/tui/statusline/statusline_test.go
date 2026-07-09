@@ -121,8 +121,10 @@ func TestRenderUnknownSegmentDoesNotPanic(t *testing.T) {
 func TestRenderTruncatesMultibyteTitleSafely(t *testing.T) {
 	rv := baseRow()
 	rv.MR.Title = "café " + strings.Repeat("ü", 80) // 85 runes, all multibyte
-	// Default cfg has maxWidth 60 for the title text segment, so truncation fires.
-	out := Render(cfg(), theme.BuildStyles(theme.Get("default")), rv, 200, false)
+	// A width narrower than the title forces the grow fit to truncate it
+	// (grow expands into free width on wide terminals, so a wide row would
+	// show the full title instead).
+	out := Render(cfg(), theme.BuildStyles(theme.Get("default")), rv, 40, false)
 	if !utf8.ValidString(out) {
 		t.Errorf("rendered output is not valid UTF-8: %q", out)
 	}
@@ -159,6 +161,31 @@ func TestGrowSegmentAbsorbsOverflow(t *testing.T) {
 	}
 	if !strings.Contains(line, "…") {
 		t.Error("grow segment should be truncated with an ellipsis")
+	}
+}
+
+func TestGrowSegmentFillsFreeWidth(t *testing.T) {
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+	cfg := config.StatuslineConfig{
+		Left:  []config.Segment{{Type: "text", Source: "title", Grow: true, MaxWidth: 60}},
+		Right: []config.Segment{{Type: "age"}},
+	}
+	// 80-rune title: longer than MaxWidth, but the terminal has room for it.
+	title := strings.Repeat("t", 80)
+	rv := RowView{MR: core.MR{
+		Title:     title,
+		UpdatedAt: time.Now().Add(-2 * time.Hour),
+	}}
+	const width = 140
+	line := Render(cfg, st, rv, width, false)
+	if strings.Contains(line, "…") {
+		t.Errorf("title fits the terminal; grow must expand past MaxWidth, not crop:\n%q", line)
+	}
+	if !strings.Contains(line, title) {
+		t.Errorf("full title should be visible on a wide terminal:\n%q", line)
+	}
+	if w := lipgloss.Width(line); w != width {
+		t.Errorf("right group should stay flush right: row width %d, want %d", w, width)
 	}
 }
 

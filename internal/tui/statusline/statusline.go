@@ -40,14 +40,15 @@ func Render(cfg config.StatuslineConfig, st theme.Styles, rv RowView, width int,
 	left := renderGroup(cfg.Left, st, rv, env, base)
 	right := renderGroup(cfg.Right, st, rv, env, base)
 
-	// A grow segment absorbs width pressure: when the row would overflow the
-	// terminal, re-render its group with the grow segment shrunk by the
-	// overflow (floor 4 runes) so the row fits instead of wrapping.
-	if over := lipgloss.Width(left) + 1 + lipgloss.Width(right) - width; over > 0 {
+	// A grow segment fills the row: its budget is whatever the other segments
+	// leave over, so it shrinks on narrow terminals (floor 4 runes) and expands
+	// into free width on wide ones. MaxWidth does not cap a grow segment's
+	// final width — it only sizes the initial render the fit adjusts from.
+	if over := lipgloss.Width(left) + 1 + lipgloss.Width(right) - width; over != 0 {
 		if segs, i := findGrow(cfg.Left, env); i >= 0 {
-			left = renderShrunk(segs, i, over, st, rv, env, base)
+			left = renderFitted(segs, i, over, st, rv, env, base)
 		} else if segs, i := findGrow(cfg.Right, env); i >= 0 {
-			right = renderShrunk(segs, i, over, st, rv, env, base)
+			right = renderFitted(segs, i, over, st, rv, env, base)
 		}
 	}
 
@@ -99,8 +100,10 @@ func findGrow(segs []config.Segment, env map[string]any) ([]config.Segment, int)
 	return nil, -1
 }
 
-// renderShrunk re-renders a group with segment i's MaxWidth reduced by over.
-func renderShrunk(segs []config.Segment, i, over int, st theme.Styles, rv RowView, env map[string]any, base lipgloss.Style) string {
+// renderFitted re-renders a group with segment i's MaxWidth adjusted by over:
+// positive over shrinks it (row would overflow), negative over grows it into
+// the row's free width.
+func renderFitted(segs []config.Segment, i, over int, st theme.Styles, rv RowView, env map[string]any, base lipgloss.Style) string {
 	s := segs[i]
 	cur := lipgloss.Width(renderSegment(s, st, rv, base))
 	newMax := cur - over
