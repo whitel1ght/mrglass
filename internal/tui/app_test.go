@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/whitel1ght/mrglass/internal/analyze"
 	"github.com/whitel1ght/mrglass/internal/config"
@@ -14,6 +16,20 @@ import (
 	"github.com/whitel1ght/mrglass/internal/review"
 	"github.com/whitel1ght/mrglass/internal/watch"
 )
+
+// drain executes a tea.Cmd, recursively flattening tea.Batch, so tests can
+// exercise the real work command even when it is batched with a spinner tick.
+func drain(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			drain(c)
+		}
+	}
+}
 
 func mr(ref, ci string) core.MR {
 	m := core.MR{Ref: ref, Title: "feat: thing", URL: "u", Role: core.RoleMine,
@@ -92,7 +108,7 @@ func TestReviewFlowConfirmAndPost(t *testing.T) {
 		t.Fatal("'y' should return a post command")
 	}
 	// Run the returned command to exercise the post.
-	cmd()
+	drain(cmd)
 	if !gl.postCalled || gl.posted != "LGTM, ship it" {
 		t.Errorf("post not performed: called=%v body=%q", gl.postCalled, gl.posted)
 	}
@@ -647,7 +663,7 @@ func TestExpandFetchesTicketWhenConfigured(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expanding a ticketed MR with Jira configured should fetch")
 	}
-	cmd() // runs Fetch
+	drain(cmd) // runs Fetch
 	if fj.calls != 1 || fj.lastKey != "PROJ-1234" {
 		t.Errorf("Fetch should be called once with the ticket key, got calls=%d key=%q", fj.calls, fj.lastKey)
 	}
@@ -790,5 +806,54 @@ func TestViewHasBlankLineBelowTabs(t *testing.T) {
 	// The view must still fill exactly the terminal height.
 	if len(lines) != 24 {
 		t.Errorf("view height %d, want %d", len(lines), 24)
+	}
+}
+
+func TestBusySpinnerVisibleWhileReviewing(t *testing.T) {
+	m, _ := reviewModel(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = u.(Model)
+	view := m.View()
+	if !strings.Contains(view, m.spinner.View()) {
+		t.Errorf("footer should show an animated spinner while reviewing:\n%s", view)
+	}
+	if !strings.Contains(view, "reviewing g/p!1") {
+		t.Errorf("footer should name the in-flight operation:\n%s", view)
+	}
+	// A failed review returns to the list view; the busy indicator must be gone.
+	u, _ = m.Update(reviewMsg(review.Result{Ref: "g/p!1", Err: errors.New("boom")}))
+	m = u.(Model)
+	view = m.View()
+	if strings.Contains(view, m.spinner.View()) || strings.Contains(view, "reviewing g/p!1") {
+		t.Errorf("busy indicator should clear once the review finishes:\n%s", view)
+	}
+}
+
+func TestBusySpinnerVisibleWhileRefreshing(t *testing.T) {
+	m, _ := reviewModel(t)
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	m = u.(Model)
+	if cmd == nil {
+		t.Fatal("'r' should return a command")
+	}
+	if view := m.View(); !strings.Contains(view, m.spinner.View()) || !strings.Contains(view, "refreshing") {
+		t.Errorf("footer should show spinner + refreshing label:\n%s", view)
+	}
+	u, _ = m.Update(fetchResultMsg(watch.FetchResult{MRs: nil}))
+	m = u.(Model)
+	if view := m.View(); strings.Contains(view, m.spinner.View()) {
+		t.Errorf("spinner should clear after the fetch result arrives:\n%s", view)
+	}
+}
+
+func TestSpinnerTickStopsWhenIdle(t *testing.T) {
+	m, _ := reviewModel(t)
+	if _, cmd := m.Update(spinner.TickMsg{}); cmd != nil {
+		t.Error("spinner ticks while idle should not reschedule (animation must stop)")
+	}
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	m = u.(Model)
+	if _, cmd := m.Update(spinner.TickMsg{}); cmd == nil {
+		t.Error("spinner ticks while busy should reschedule to keep animating")
 	}
 }

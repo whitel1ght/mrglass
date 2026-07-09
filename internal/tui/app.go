@@ -2,15 +2,18 @@ package tui
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -95,6 +98,9 @@ type Model struct {
 	showHelp   bool
 	width      int
 	height     int
+
+	spinner spinner.Model
+	busy    map[string]string // in-flight op key -> footer label
 }
 
 // ticketTTL is how long a fetched ticket stays fresh before an expand refetches.
@@ -136,11 +142,21 @@ func New(cfg config.Config, p provider.Provider, me string, az analyze.Analyzer,
 		ticketAt:   map[string]time.Time{},
 		autoTriage: cfg.AutoTriage && az != nil,
 		status:     "loading…",
+		spinner:    spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		busy:       map[string]string{},
 	}
 }
 
+// startBusy registers an in-flight operation's footer label and returns the
+// spinner tick that animates it. Pair with a delete(m.busy, key) in the
+// operation's result handler.
+func (m *Model) startBusy(key, label string) tea.Cmd {
+	m.busy[key] = label
+	return m.spinner.Tick
+}
+
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.fetchCmd()}
+	cmds := []tea.Cmd{m.startBusy("fetch", "loading MRs"), m.fetchCmd()}
 	if m.cfg.RefreshMinutes > 0 {
 		cmds = append(cmds, m.tickCmd())
 	}
@@ -268,7 +284,7 @@ func (m *Model) maybeFetchTicket(mr core.MR) tea.Cmd {
 	}
 	m.ticketing[key] = true
 	delete(m.ticketErr, key)
-	return m.jiraFetchCmd(key)
+	return tea.Batch(m.startBusy("jira:"+key, "fetching "+key), m.jiraFetchCmd(key))
 }
 
 // ticketView assembles the detailpane TicketView for an MR from current state.
@@ -316,7 +332,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		// reschedule the metronome AND fetch; the two are independent
-		return m, tea.Batch(m.tickCmd(), m.fetchCmd())
+		return m, tea.Batch(m.tickCmd(), m.startBusy("fetch", "refreshing"), m.fetchCmd())
+
+	case spinner.TickMsg:
+		if len(m.busy) == 0 {
+			return m, nil // idle: let the animation stop
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case fetchErrMsg:
 		m.status = "⚠ refresh failed: " + msg.err.Error()
@@ -328,6 +352,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case reviewMsg:
 		m.reviewing = false
+		delete(m.busy, "review")
 		res := review.Result(msg)
 		if res.Err != nil {
 			m.status = "⚠ review failed: " + res.Err.Error() + "  (full log: " + review.LogPath() + ")"
@@ -372,6 +397,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case postResultMsg:
+		delete(m.busy, "post")
 		if msg.err != nil {
 			// Keep the pending review so the user can simply re-press y to retry
 			// (likely a transient API blip). We don't auto-retry a POST: if the
@@ -387,6 +413,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case fetchResultMsg:
+		delete(m.busy, "fetch")
 		res := watch.FetchResult(msg)
 		if res.Err != nil {
 			m.status = "⚠ refresh failed: " + res.Err.Error()
@@ -401,19 +428,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		if m.autoTriage && m.analyzer != nil {
 			for _, c := range watch.TriageWorthy(res.Changes) {
-				cmds = append(cmds, m.triageCmd(c))
+				cmds = append(cmds, m.startBusy("triage:"+c.Ref, "triage "+c.Ref), m.triageCmd(c))
 			}
 		}
 		return m, tea.Batch(cmds...)
 
 	case adviceMsg:
 		a := analyze.Advice(msg)
+		delete(m.busy, "triage:"+a.Ref)
 		if a.Err == nil && a.Text != "" {
 			m.advice[a.Ref] = a.Text
 		}
 		return m, nil
 
 	case jiraMsg:
+		delete(m.busy, "jira:"+msg.key)
 		delete(m.ticketing, msg.key)
 		if msg.err != nil {
 			m.ticketErr[msg.key] = true
@@ -424,6 +453,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case worktreeMsg:
+		delete(m.busy, "worktree")
 		if msg.err != nil {
 			review.Logf("worktree %s FAILED: %v", msg.slug, msg.err)
 			m.status = "⚠ open worktree failed: " + msg.err.Error() + "  (log: " + review.LogPath() + ")"
@@ -474,8 +504,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case msg.String() == "y":
 			p := m.pendingReview
-			m.status = "posting review…"
-			return m, m.postCmd(p.mr, p.text)
+			return m, tea.Batch(m.startBusy("post", "posting review to "+p.ref), m.postCmd(p.mr, p.text))
 		case msg.String() == "n", msg.Type == tea.KeyEsc:
 			m.pendingReview = nil
 			m.status = "review discarded"
@@ -530,10 +559,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Refresh):
-		m.status = "refreshing…"
 		// Drop cached ticket statuses so the next expand refetches fresh data.
 		m.ticketAt = map[string]time.Time{}
-		return m, m.fetchCmd()
+		return m, tea.Batch(m.startBusy("fetch", "refreshing"), m.fetchCmd())
 	case key.Matches(msg, m.keys.ToggleAuto):
 		m.autoTriage = !m.autoTriage && m.analyzer != nil
 		return m, nil
@@ -585,12 +613,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = "no local clone for " + mr.Ref + " (set projectsDir/projectPaths)"
 			return m, nil
 		}
-		m.status = "opening worktree for " + worktree.Slug(*mr) + "…"
-		return m, m.worktreeCmd(*mr, repoDir)
+		return m, tea.Batch(m.startBusy("worktree", "opening worktree for "+worktree.Slug(*mr)), m.worktreeCmd(*mr, repoDir))
 	case key.Matches(msg, m.keys.Triage):
 		if mr := m.selected(); mr != nil && m.analyzer != nil {
 			c := core.Change{Ref: mr.Ref, Title: mr.Title, Detail: "manual triage requested"}
-			return m, m.triageCmd(c)
+			return m, tea.Batch(m.startBusy("triage:"+c.Ref, "triage "+c.Ref), m.triageCmd(c))
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Review):
@@ -600,8 +627,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if mr := m.selected(); mr != nil && !m.reviewing {
 			m.reviewing = true
-			m.status = "reviewing " + mr.Ref + "…"
-			return m, m.reviewCmd(*mr)
+			return m, tea.Batch(m.startBusy("review", "reviewing "+mr.Ref), m.reviewCmd(*mr))
 		}
 		return m, nil
 	}
@@ -762,7 +788,19 @@ func (m Model) View() string {
 	if m.autoTriage {
 		auto = "ON"
 	}
-	status := m.styles.Footer.Render(fmt.Sprintf("%s · auto-triage %s", m.status, auto))
+	var status string
+	if len(m.busy) > 0 {
+		// Something is running: animated spinner + accent-colored labels so
+		// in-flight work is unmistakable (sorted by key for a stable order).
+		labels := make([]string, 0, len(m.busy))
+		for _, k := range slices.Sorted(maps.Keys(m.busy)) {
+			labels = append(labels, m.busy[k])
+		}
+		status = m.styles.Accent.Render(m.spinner.View()+" "+strings.Join(labels, " · ")+"…") +
+			m.styles.Footer.Render(" · auto-triage "+auto)
+	} else {
+		status = m.styles.Footer.Render(fmt.Sprintf("%s · auto-triage %s", m.status, auto))
+	}
 	helpBar := m.help.ShortHelpView(m.keys.ShortHelp())
 
 	// The body fills all vertical space between the tab bar and the footer so
