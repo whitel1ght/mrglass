@@ -440,7 +440,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if m.cfg.ReviewSkill != "" {
 			ctxNote += ", ⚠ skill not invoked"
 		}
-		m.status = "review ready (" + ctxNote + ") — post to MR? [y]es / [n]o"
+		m.status = "review ready (" + ctxNote + ") — post to MR? [y]es / [n]o / [c]opy"
+		return m, nil
+
+	case copyResultMsg:
+		if msg.err != nil {
+			m.status = "⚠ copy failed: " + msg.err.Error()
+		} else {
+			m.status = "✓ review copied to clipboard"
+		}
 		return m, nil
 
 	case postResultMsg:
@@ -572,6 +580,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.pendingReview = nil
 			m.status = "review discarded"
 			return m, nil
+		case msg.String() == "c":
+			// Copy the review and STAY in confirm — the user may still want
+			// to post it, or discard and paste it elsewhere.
+			return m, copyCmd(m.pendingReview.text)
 		case msg.String() == "g":
 			m.reviewVP.GotoTop()
 			return m, nil
@@ -791,7 +803,12 @@ func (m Model) reviewConfirmView() string {
 	pct := fmt.Sprintf("%3.0f%%", m.reviewVP.ScrollPercent()*100)
 	header := m.styles.Header.Render("Claude review — "+p.ref) + "  " +
 		m.styles.Help.Render(pct)
-	hint := m.styles.Help.Render("scroll: j/k g/G PgUp/PgDn · [y] post to GitLab · [n]/esc discard")
+	hint := m.styles.Help.Render("scroll: j/k g/G PgUp/PgDn · [y] post to GitLab · [c]opy to clipboard · [n]/esc discard")
+	// Copy feedback (✓ copied / ⚠ failed) happens while this view is open —
+	// show the status line here too, or the result would be invisible.
+	if s := m.status; strings.Contains(s, "cop") {
+		hint = m.styles.Footer.Render(s) + "  " + hint
+	}
 	return strings.Join([]string{header, "", m.reviewVP.View(), hint}, "\n")
 }
 

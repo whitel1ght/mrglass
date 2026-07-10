@@ -938,3 +938,60 @@ func TestHiddenPersistsAcrossRestart(t *testing.T) {
 		t.Errorf("hidden set should survive restart:\n%s", m2.View())
 	}
 }
+
+func TestCopyReviewInConfirmMode(t *testing.T) {
+	var copied string
+	orig := clipboardRun
+	clipboardRun = func(text string) error { copied = text; return nil }
+	t.Cleanup(func() { clipboardRun = orig })
+
+	m, _ := reviewModel(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}) // start review
+	m = u.(Model)
+	u, _ = m.Update(reviewMsg(review.Result{Ref: "g/p!1", Text: "LGTM, ship it"}))
+	m = u.(Model)
+	if m.pendingReview == nil {
+		t.Fatal("expected confirm state")
+	}
+	if !strings.Contains(m.View(), "[c]opy") {
+		t.Errorf("confirm prompt should advertise copy:\n%s", m.View())
+	}
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}) // copy
+	m = u.(Model)
+	if cmd == nil {
+		t.Fatal("'c' in confirm mode should return a copy command")
+	}
+	u, _ = m.Update(cmd()) // run the copy, deliver its result
+	m = u.(Model)
+	if copied != "LGTM, ship it" {
+		t.Errorf("clipboard got %q, want the review text", copied)
+	}
+	if m.pendingReview == nil {
+		t.Error("copying must stay in the confirm view")
+	}
+	if !strings.Contains(m.View(), "review copied") {
+		t.Errorf("status should confirm the copy:\n%s", m.View())
+	}
+}
+
+func TestCopyReviewFailureSurfaces(t *testing.T) {
+	orig := clipboardRun
+	clipboardRun = func(string) error { return errors.New("no pbcopy") }
+	t.Cleanup(func() { clipboardRun = orig })
+
+	m, _ := reviewModel(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = u.(Model)
+	u, _ = m.Update(reviewMsg(review.Result{Ref: "g/p!1", Text: "body"}))
+	m = u.(Model)
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = u.(Model)
+	u, _ = m.Update(cmd())
+	m = u.(Model)
+	if !strings.Contains(m.View(), "copy failed") {
+		t.Errorf("copy failure should surface in status:\n%s", m.View())
+	}
+	if m.pendingReview == nil {
+		t.Error("a failed copy must not discard the pending review")
+	}
+}
