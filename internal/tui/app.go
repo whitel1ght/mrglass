@@ -1003,7 +1003,9 @@ func (m Model) View() string {
 		var ptabs []string
 		for i, lbl := range labels {
 			if values[i] == m.projectFilter {
-				ptabs = append(ptabs, m.styles.Header.Render("["+lbl+"]"))
+				// Active project tab is amber (Warn) so the project axis reads
+				// distinctly from the accent-blue status tabs above it.
+				ptabs = append(ptabs, m.styles.Warn.Render("["+lbl+"]"))
 			} else {
 				ptabs = append(ptabs, m.styles.Footer.Render(" "+lbl+" "))
 			}

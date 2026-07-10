@@ -11,6 +11,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/whitel1ght/mrglass/internal/analyze"
 	"github.com/whitel1ght/mrglass/internal/config"
 	"github.com/whitel1ght/mrglass/internal/core"
@@ -1143,5 +1145,28 @@ func TestProjectFilterVanishedFallsBackToAll(t *testing.T) {
 	m = u.(Model)
 	if m.projectFilter != "" {
 		t.Errorf("vanished project should fall back to All, got %q", m.projectFilter)
+	}
+}
+
+func TestActiveProjectTabUsesWarnColor(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+	m := projModel(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")}) // select acme/api
+	m = u.(Model)
+	view := m.View()
+
+	// Active project tab is rendered with the theme's Warn style.
+	if !strings.Contains(view, m.styles.Warn.Render("[api]")) {
+		t.Errorf("active project tab should use Warn color:\n%s", view)
+	}
+	// Axes stay distinct: the active status tab keeps the accent Header style,
+	// and Header vs Warn are genuinely different colors (so the two active
+	// tabs never collide visually).
+	if !strings.Contains(view, m.styles.Header.Render("[Needs My Review (2)]")) {
+		t.Error("active status tab should keep the accent Header style")
+	}
+	if m.styles.Header.Render("x") == m.styles.Warn.Render("x") {
+		t.Error("Header and Warn must render as distinct colors")
 	}
 }
