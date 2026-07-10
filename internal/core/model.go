@@ -108,6 +108,19 @@ func ticketRe(pattern string) (*regexp.Regexp, bool) {
 	return re, true
 }
 
+// ProjectOf returns the project path embedded in an MR ref — the part before
+// the MR/PR number separator (GitLab "group/project!177", GitHub
+// "owner/repo#42"). A ref with neither separator is returned unchanged.
+func ProjectOf(ref string) string {
+	if i := strings.IndexAny(ref, "!#"); i >= 0 {
+		return ref[:i]
+	}
+	return ref
+}
+
+// Project is the MR's project path, derived from its ref.
+func (m MR) Project() string { return ProjectOf(m.Ref) }
+
 // ParseTicket extracts a ticket key from the title, then the branch, upper-cased.
 // Returns "Other" when neither matches, and also when the pattern is invalid or
 // has no capture group (config validation warns about those; this is the

@@ -87,3 +87,21 @@ func TestParseTicketPatternWithoutGroupReturnsOther(t *testing.T) {
 		t.Errorf("group-less pattern: got %q, want Other", got)
 	}
 }
+
+func TestProjectOf(t *testing.T) {
+	cases := []struct{ ref, want string }{
+		{"group/project!177", "group/project"},
+		{"acme/sub/repo!3", "acme/sub/repo"},
+		{"owner/repo#42", "owner/repo"},
+		{"noseparator", "noseparator"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := ProjectOf(c.ref); got != c.want {
+			t.Errorf("ProjectOf(%q) = %q, want %q", c.ref, got, c.want)
+		}
+	}
+	if got := (MR{Ref: "g/p!1"}).Project(); got != "g/p" {
+		t.Errorf("MR.Project() = %q", got)
+	}
+}

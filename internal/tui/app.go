@@ -104,6 +104,8 @@ type Model struct {
 
 	hidden     map[string]bool // user-hidden refs (persisted; fully muted)
 	hiddenPath string
+
+	projectFilter string // "" = All; else a project path (second tab axis)
 }
 
 // ticketTTL is how long a fetched ticket stays fresh before an expand refetches.
@@ -181,6 +183,80 @@ func (m Model) visibleMRs() []core.MR {
 		}
 	}
 	return out
+}
+
+// projects returns the distinct project paths among the visible MRs, sorted.
+func (m Model) projects() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, mr := range m.visibleMRs() {
+		p := mr.Project()
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// projectLabels returns display names for the project tabs (last path
+// segment), disambiguating with the full path when two share a last segment.
+func projectLabels(projects []string) []string {
+	seg := func(p string) string {
+		if i := strings.LastIndex(p, "/"); i >= 0 {
+			return p[i+1:]
+		}
+		return p
+	}
+	count := map[string]int{}
+	for _, p := range projects {
+		count[seg(p)]++
+	}
+	out := make([]string, len(projects))
+	for i, p := range projects {
+		if count[seg(p)] > 1 {
+			out[i] = p // ambiguous: show the full path
+		} else {
+			out[i] = seg(p)
+		}
+	}
+	return out
+}
+
+// projectScoped filters a list to the active project (no-op when All).
+func (m Model) projectScoped(mrs []core.MR) []core.MR {
+	if m.projectFilter == "" {
+		return mrs
+	}
+	out := make([]core.MR, 0, len(mrs))
+	for _, mr := range mrs {
+		if mr.Project() == m.projectFilter {
+			out = append(out, mr)
+		}
+	}
+	return out
+}
+
+// cycleProject moves the project filter by delta over [All, ...projects],
+// wrapping. delta +1 = next, -1 = prev.
+func (m *Model) cycleProject(delta int) {
+	projects := m.projects()
+	if len(projects) < 2 {
+		return // nothing to filter
+	}
+	ring := append([]string{""}, projects...) // "" = All at index 0
+	cur := 0
+	for i, p := range ring {
+		if p == m.projectFilter {
+			cur = i
+			break
+		}
+	}
+	n := len(ring)
+	m.projectFilter = ring[((cur+delta)%n+n)%n]
+	m.cursor = 0
+	m.refilter()
 }
 
 // hiddenMRs is the fetched list restricted to user-hidden refs (Hidden tab).
@@ -533,6 +609,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // applyMRs stores the full fetched list and recomputes the active-section view.
 func (m *Model) applyMRs(all []core.MR) {
 	m.allMRs = all
+	// If the selected project vanished from the fresh list, fall back to All.
+	if m.projectFilter != "" && !slices.Contains(m.projects(), m.projectFilter) {
+		m.projectFilter = ""
+	}
 	m.refilter()
 }
 
@@ -547,13 +627,14 @@ func (m *Model) refilter() {
 	}
 	var matched []core.MR
 	if m.onHiddenTab() {
+		// The Hidden tab is its own axis; the project filter doesn't apply.
 		matched = m.hiddenMRs()
 	} else {
 		filter := ""
 		if m.sectionIdx < len(m.cfg.Sections) {
 			filter = m.cfg.Sections[m.sectionIdx].Filter
 		}
-		matched = section.Filter(filter, m.visibleMRs())
+		matched = section.Filter(filter, m.projectScoped(m.visibleMRs()))
 	}
 	keysOrder, groups := section.GroupByTicket(matched)
 	var flat []core.MR
@@ -644,6 +725,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.refilter()
 		}
+		return m, nil
+	case key.Matches(msg, m.keys.NextProject):
+		m.cycleProject(1)
+		return m, nil
+	case key.Matches(msg, m.keys.PrevProject):
+		m.cycleProject(-1)
 		return m, nil
 	case key.Matches(msg, m.keys.Hide):
 		mr := m.selected()
@@ -817,7 +904,7 @@ func (m Model) helpOverlay() string {
 		title    string
 		bindings []key.Binding
 	}{
-		{"Navigation", []key.Binding{m.keys.Up, m.keys.Down, m.keys.Top, m.keys.Bottom, m.keys.NextSection, m.keys.PrevSection}},
+		{"Navigation", []key.Binding{m.keys.Up, m.keys.Down, m.keys.Top, m.keys.Bottom, m.keys.NextSection, m.keys.PrevSection, m.keys.NextProject, m.keys.PrevProject}},
 		{"Actions", []key.Binding{m.keys.Expand, m.keys.Open, m.keys.OpenTicket, m.keys.OpenWork, m.keys.Review, m.keys.Triage, m.keys.Hide}},
 		{"App", []key.Binding{m.keys.Refresh, m.keys.ToggleAuto, m.keys.Help, m.keys.Quit}},
 	}
@@ -879,15 +966,16 @@ func (m Model) View() string {
 		return m.reviewConfirmView()
 	}
 
-	// tabs, each with a count badge of how many MRs match it (once loaded).
-	// Hidden MRs are excluded from every configured section; when any exist,
-	// a synthetic Hidden tab appears at the end.
-	visible := m.visibleMRs()
+	// Status tabs, each with a count badge (once loaded). Hidden MRs are
+	// excluded from every configured section; badges also reflect the active
+	// project filter so counts match the list. A synthetic Hidden tab is
+	// appended when anything is hidden.
+	scoped := m.projectScoped(m.visibleMRs())
 	var tabs []string
 	for i, s := range m.cfg.Sections {
 		label := s.Title
 		if m.loaded {
-			label = fmt.Sprintf("%s (%d)", label, len(section.Filter(s.Filter, visible)))
+			label = fmt.Sprintf("%s (%d)", label, len(section.Filter(s.Filter, scoped)))
 		}
 		if i == m.sectionIdx {
 			label = m.styles.Header.Render("[" + label + "]")
@@ -905,9 +993,28 @@ func (m Model) View() string {
 		}
 		tabs = append(tabs, label)
 	}
-	// Trailing newline = one blank separator line between the tabs and the
-	// list; chrome accounts for it automatically via lipgloss.Height(tabBar).
-	tabBar := strings.Join(tabs, " ") + "\n"
+	headerRows := []string{strings.Join(tabs, " ")}
+
+	// Project tab row (second axis) — only when there's more than one project
+	// to choose between. "All" first, then project short-names.
+	if projects := m.projects(); len(projects) >= 2 {
+		labels := append([]string{"All"}, projectLabels(projects)...)
+		values := append([]string{""}, projects...)
+		var ptabs []string
+		for i, lbl := range labels {
+			if values[i] == m.projectFilter {
+				ptabs = append(ptabs, m.styles.Header.Render("["+lbl+"]"))
+			} else {
+				ptabs = append(ptabs, m.styles.Footer.Render(" "+lbl+" "))
+			}
+		}
+		headerRows = append(headerRows, m.styles.Subtle.Render("[ ] ")+strings.Join(ptabs, " "))
+	}
+
+	// Trailing "" = one blank separator line between the header and the list;
+	// chrome accounts for it automatically via lipgloss.Height(tabBar).
+	headerRows = append(headerRows, "")
+	tabBar := strings.Join(headerRows, "\n")
 
 	// Full-width list. Each MR is one line, prefixed with a disclosure marker
 	// (▸ collapsed / ▾ expanded). An expanded MR shows its detail indented

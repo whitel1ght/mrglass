@@ -1024,3 +1024,116 @@ func TestHelpOverlayIsGroupedAndBordered(t *testing.T) {
 		t.Error("esc should close the help overlay")
 	}
 }
+
+// projModel builds a loaded model with MRs across three projects, all in the
+// default first section (review_requested).
+func projModel(t *testing.T) Model {
+	t.Helper()
+	m := newTestModel()
+	m.width, m.height = 140, 40
+	mk := func(ref string) core.MR {
+		x := mr(ref, "success")
+		x.Role = core.RoleReviewRequested
+		return x
+	}
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{
+		mk("acme/api!1"), mk("acme/api!2"), mk("acme/web!3"), mk("infra/deploy!4"),
+	}}))
+	return u.(Model)
+}
+
+func TestProjectRowListsDistinctSortedWithAll(t *testing.T) {
+	m := projModel(t)
+	// The project row is the header line beginning with the "[ ]" hint.
+	var row string
+	for _, ln := range strings.Split(m.View(), "\n") {
+		if strings.Contains(ln, "[ ]") {
+			row = ln
+			break
+		}
+	}
+	if row == "" {
+		t.Fatalf("no project row found:\n%s", m.View())
+	}
+	// Projects sort by full path (acme/api < acme/web < infra/deploy), so the
+	// short-name labels appear in the order api, web, deploy after All.
+	iAll := strings.Index(row, "All")
+	iApi := strings.Index(row, "api")
+	iWeb := strings.Index(row, "web")
+	iDeploy := strings.Index(row, "deploy")
+	if iAll < 0 || iApi < 0 || iWeb < 0 || iDeploy < 0 {
+		t.Fatalf("project row missing entries: %q", row)
+	}
+	if !(iAll < iApi && iApi < iWeb && iWeb < iDeploy) {
+		t.Errorf("project row order wrong (want All<api<web<deploy): %q", row)
+	}
+}
+
+func TestProjectRowHiddenWhenSingleProject(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 140, 40
+	one := mr("acme/api!1", "success")
+	one.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{one}}))
+	m = u.(Model)
+	for _, ln := range strings.Split(m.View(), "\n") {
+		if strings.Contains(ln, "[ ]") {
+			t.Errorf("project row should be absent with a single project: %q", ln)
+		}
+	}
+}
+
+func TestProjectFilterCyclesAndFilters(t *testing.T) {
+	m := projModel(t)
+	if m.projectFilter != "" {
+		t.Fatalf("default should be All, got %q", m.projectFilter)
+	}
+	// ] -> first project (acme/api, alphabetical)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")})
+	m = u.(Model)
+	if m.projectFilter != "acme/api" {
+		t.Fatalf("after ] want acme/api, got %q", m.projectFilter)
+	}
+	if len(m.mrs) != 2 {
+		t.Errorf("acme/api should show 2 MRs, got %d", len(m.mrs))
+	}
+	for _, x := range m.mrs {
+		if x.Project() != "acme/api" {
+			t.Errorf("list contains non-api MR %q", x.Ref)
+		}
+	}
+	// [ back to All
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")})
+	m = u.(Model)
+	if m.projectFilter != "" {
+		t.Errorf("[ from first project should wrap to All, got %q", m.projectFilter)
+	}
+	if len(m.mrs) != 4 {
+		t.Errorf("All should show 4 MRs, got %d", len(m.mrs))
+	}
+}
+
+func TestProjectFilterPersistsAcrossStatusTab(t *testing.T) {
+	m := projModel(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")}) // acme/api
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // next status section
+	m = u.(Model)
+	if m.projectFilter != "acme/api" {
+		t.Errorf("project filter should persist across status tabs, got %q", m.projectFilter)
+	}
+}
+
+func TestProjectFilterVanishedFallsBackToAll(t *testing.T) {
+	m := projModel(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")}) // acme/api
+	m = u.(Model)
+	// refresh with acme/api gone
+	web := mr("acme/web!3", "success")
+	web.Role = core.RoleReviewRequested
+	u, _ = m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{web}}))
+	m = u.(Model)
+	if m.projectFilter != "" {
+		t.Errorf("vanished project should fall back to All, got %q", m.projectFilter)
+	}
+}

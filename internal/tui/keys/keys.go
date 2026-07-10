@@ -17,6 +17,8 @@ type KeyMap struct {
 	Triage      key.Binding
 	Review      key.Binding
 	Hide        key.Binding
+	NextProject key.Binding
+	PrevProject key.Binding
 	ToggleAuto  key.Binding
 	Help        key.Binding
 	Quit        key.Binding
@@ -38,6 +40,8 @@ func Default() KeyMap {
 		Triage:      key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "triage")),
 		Review:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "claude review")),
 		Hide:        key.NewBinding(key.WithKeys("backspace"), key.WithHelp("⌫", "hide/unhide MR")),
+		NextProject: key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next project")),
+		PrevProject: key.NewBinding(key.WithKeys("["), key.WithHelp("[", "prev project")),
 		ToggleAuto:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "toggle auto-triage")),
 		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
