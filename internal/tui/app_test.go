@@ -1047,7 +1047,7 @@ func TestProjectRowListsDistinctSortedWithAll(t *testing.T) {
 	// The project row is the header line beginning with the "[ ]" hint.
 	var row string
 	for _, ln := range strings.Split(m.View(), "\n") {
-		if strings.Contains(ln, "[ ]") {
+		if strings.Contains(ln, "[/]") {
 			row = ln
 			break
 		}
@@ -1067,6 +1067,14 @@ func TestProjectRowListsDistinctSortedWithAll(t *testing.T) {
 	if !(iAll < iApi && iApi < iWeb && iWeb < iDeploy) {
 		t.Errorf("project row order wrong (want All<api<web<deploy): %q", row)
 	}
+	// The [ ]-key hint sits at the END of the row, after the tabs — no leading
+	// "[ ]" artifact that looks like an empty tab.
+	if !strings.Contains(row, "[/]") {
+		t.Errorf("project row should carry a key hint: %q", row)
+	}
+	if strings.Index(row, "[/]") < iDeploy {
+		t.Errorf("key hint should follow the project tabs, not lead them: %q", row)
+	}
 }
 
 func TestProjectRowHiddenWhenSingleProject(t *testing.T) {
@@ -1077,7 +1085,7 @@ func TestProjectRowHiddenWhenSingleProject(t *testing.T) {
 	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{one}}))
 	m = u.(Model)
 	for _, ln := range strings.Split(m.View(), "\n") {
-		if strings.Contains(ln, "[ ]") {
+		if strings.Contains(ln, "[/]") {
 			t.Errorf("project row should be absent with a single project: %q", ln)
 		}
 	}

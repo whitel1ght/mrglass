@@ -1008,7 +1008,8 @@ func (m Model) View() string {
 				ptabs = append(ptabs, m.styles.Footer.Render(" "+lbl+" "))
 			}
 		}
-		headerRows = append(headerRows, m.styles.Subtle.Render("[ ] ")+strings.Join(ptabs, " "))
+		hint := m.styles.Subtle.Render("  [/] project")
+		headerRows = append(headerRows, strings.Join(ptabs, " ")+hint)
 	}
 
 	// Trailing "" = one blank separator line between the header and the list;
