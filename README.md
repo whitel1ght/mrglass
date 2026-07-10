@@ -14,6 +14,8 @@ background auto-refresh, and deep **Claude** integration:
   Claude.
 - **Tickets** — open the linked issue in your browser (`J`, any tracker via a URL
   template) and see inline Jira status when you expand an MR.
+- **Hide noise** — `backspace` hides an MR into a **Hidden** tab (persisted,
+  fully muted: no notifications, no triage); `backspace` there restores it.
 
 ## Install
 

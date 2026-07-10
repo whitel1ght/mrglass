@@ -3,6 +3,8 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -865,5 +867,74 @@ func TestTriageErrorSurfacedInStatus(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "triage") || !strings.Contains(view, "Not logged in") {
 		t.Errorf("a failed triage must be visible in the status footer, got:\n%s", view)
+	}
+}
+
+// hideModel builds a model with a real temp state path (hide persists to a
+// sibling file) and two review_requested MRs in the default first section.
+func hideModel(t *testing.T) (Model, string) {
+	t.Helper()
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	m := New(config.Default(), nil, "you", nil, statePath)
+	m.width, m.height = 120, 30
+	one := mr("g/p!1", "success")
+	one.Title, one.Role = "one", core.RoleReviewRequested
+	two := mr("g/p!2", "success")
+	two.Title, two.Role = "two", core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{one, two}}))
+	return u.(Model), statePath
+}
+
+func TestBackspaceHidesAndHiddenTabAppears(t *testing.T) {
+	m, _ := hideModel(t)
+	if strings.Contains(m.View(), "Hidden (") {
+		t.Fatal("no hidden tab before anything is hidden")
+	}
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace}) // hide "one" (cursor 0)
+	m = u.(Model)
+	view := m.View()
+	if strings.Contains(view, "▸ ") && strings.Contains(view, " one") && !strings.Contains(view, "Hidden") {
+		t.Errorf("hidden MR should leave the section:\n%s", view)
+	}
+	if !strings.Contains(view, "Hidden (1)") {
+		t.Errorf("hidden tab with count should appear:\n%s", view)
+	}
+	// Cycle to the hidden tab (3 configured sections -> hidden is index 3).
+	for i := 0; i < 3; i++ {
+		u, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m = u.(Model)
+	}
+	view = m.View()
+	if !strings.Contains(view, "[Hidden (1)]") {
+		t.Fatalf("should land on the hidden tab:\n%s", view)
+	}
+	if !strings.Contains(view, "one") {
+		t.Errorf("hidden tab should list the hidden MR:\n%s", view)
+	}
+	// Backspace on the hidden tab restores; the tab disappears.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = u.(Model)
+	view = m.View()
+	if strings.Contains(view, "Hidden (") {
+		t.Errorf("hidden tab should disappear once empty:\n%s", view)
+	}
+}
+
+func TestHiddenPersistsAcrossRestart(t *testing.T) {
+	m, statePath := hideModel(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace}) // hide "one"
+	m = u.(Model)
+	if _, err := os.Stat(core.HiddenPath(statePath)); err != nil {
+		t.Fatalf("hidden file should be written: %v", err)
+	}
+	// "Restart": a fresh model on the same state path sees the MR as hidden.
+	m2 := New(config.Default(), nil, "you", nil, statePath)
+	m2.width, m2.height = 120, 30
+	one := mr("g/p!1", "success")
+	one.Title, one.Role = "one", core.RoleReviewRequested
+	u2, _ := m2.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{one}}))
+	m2 = u2.(Model)
+	if !strings.Contains(m2.View(), "Hidden (1)") {
+		t.Errorf("hidden set should survive restart:\n%s", m2.View())
 	}
 }

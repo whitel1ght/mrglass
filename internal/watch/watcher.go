@@ -19,6 +19,7 @@ type Deps struct {
 	Me        string
 	StatePath string
 	Cfg       config.Config
+	Hidden    map[string]bool // user-hidden refs: their changes are fully muted
 }
 
 // Fetch lists MRs, diffs against saved state, persists the new state, notifies on
@@ -41,6 +42,18 @@ func Fetch(d Deps) FetchResult {
 	var changes []core.Change
 	if len(prev) > 0 {
 		changes = core.Diff(prev, curr)
+	}
+	// Hidden MRs are fully muted: their changes neither notify nor reach the
+	// TUI's auto-triage. Snapshots above still track them, so unhiding later
+	// never replays a backlog of stale notifications.
+	if len(d.Hidden) > 0 {
+		kept := changes[:0]
+		for _, c := range changes {
+			if !d.Hidden[c.Ref] {
+				kept = append(kept, c)
+			}
+		}
+		changes = kept
 	}
 	var warning string
 	if loadErr != nil {

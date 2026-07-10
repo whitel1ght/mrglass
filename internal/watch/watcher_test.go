@@ -119,3 +119,22 @@ func TestFetchSurfacesSaveStateFailure(t *testing.T) {
 		t.Error("expected a Warning when SaveState fails")
 	}
 }
+
+func TestFetchDropsHiddenChanges(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	Fetch(Deps{Provider: fakeProvider{mrs: []core.MR{mineMR("g/p!1", "success")}},
+		Me: "you", StatePath: statePath, Cfg: config.Default()}) // baseline
+
+	res := Fetch(Deps{Provider: fakeProvider{mrs: []core.MR{mineMR("g/p!1", "failed")}},
+		Me: "you", StatePath: statePath, Cfg: config.Default(),
+		Hidden: map[string]bool{"g/p!1": true}})
+	if res.Err != nil {
+		t.Fatalf("err: %v", res.Err)
+	}
+	if len(res.Changes) != 0 {
+		t.Errorf("changes on a hidden MR must be muted, got %v", res.Changes)
+	}
+	if len(res.MRs) != 1 {
+		t.Errorf("hidden MRs are still fetched (shown in the Hidden tab), got %d", len(res.MRs))
+	}
+}

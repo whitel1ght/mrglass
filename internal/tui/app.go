@@ -101,6 +101,9 @@ type Model struct {
 
 	spinner spinner.Model
 	busy    map[string]string // in-flight op key -> footer label
+
+	hidden     map[string]bool // user-hidden refs (persisted; fully muted)
+	hiddenPath string
 }
 
 // ticketTTL is how long a fetched ticket stays fresh before an expand refetches.
@@ -130,7 +133,9 @@ func (m Model) WithJiraDisabled(reason string) Model {
 }
 
 func New(cfg config.Config, p provider.Provider, me string, az analyze.Analyzer, statePath string) Model {
-	return Model{
+	hiddenPath := core.HiddenPath(statePath)
+	hidden, hiddenErr := core.LoadHidden(hiddenPath)
+	m := Model{
 		cfg: cfg, provider: p, me: me, analyzer: az, statePath: statePath,
 		keys: keys.Default(), help: help.New(),
 		styles:     theme.BuildStyles(theme.Get(cfg.Theme)),
@@ -144,7 +149,49 @@ func New(cfg config.Config, p provider.Provider, me string, az analyze.Analyzer,
 		status:     "loading…",
 		spinner:    spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		busy:       map[string]string{},
+		hidden:     hidden,
+		hiddenPath: hiddenPath,
 	}
+	if hiddenErr != nil {
+		m.status = "⚠ " + hiddenErr.Error()
+	}
+	return m
+}
+
+// onHiddenTab reports whether the synthetic Hidden tab (index just past the
+// configured sections) is active.
+func (m Model) onHiddenTab() bool { return m.sectionIdx == len(m.cfg.Sections) }
+
+// tabCount is the number of cyclable tabs: the configured sections plus the
+// synthetic Hidden tab when anything is hidden.
+func (m Model) tabCount() int {
+	n := len(m.cfg.Sections)
+	if len(m.hiddenMRs()) > 0 {
+		n++
+	}
+	return n
+}
+
+// visibleMRs is the fetched list minus user-hidden refs (normal tabs).
+func (m Model) visibleMRs() []core.MR {
+	out := make([]core.MR, 0, len(m.allMRs))
+	for _, mr := range m.allMRs {
+		if !m.hidden[mr.Ref] {
+			out = append(out, mr)
+		}
+	}
+	return out
+}
+
+// hiddenMRs is the fetched list restricted to user-hidden refs (Hidden tab).
+func (m Model) hiddenMRs() []core.MR {
+	var out []core.MR
+	for _, mr := range m.allMRs {
+		if m.hidden[mr.Ref] {
+			out = append(out, mr)
+		}
+	}
+	return out
 }
 
 // startBusy registers an in-flight operation's footer label and returns the
@@ -164,7 +211,7 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) fetchCmd() tea.Cmd {
-	d := watch.Deps{Provider: m.provider, Me: m.me, StatePath: m.statePath, Cfg: m.cfg}
+	d := watch.Deps{Provider: m.provider, Me: m.me, StatePath: m.statePath, Cfg: m.cfg, Hidden: m.hidden}
 	return func() tea.Msg {
 		if m.provider == nil {
 			return fetchResultMsg(watch.FetchResult{})
@@ -485,11 +532,21 @@ func (m *Model) applyMRs(all []core.MR) {
 // allMRs. It does NOT hit the network — sections are client-side filters over
 // the same list, so switching tabs is instant.
 func (m *Model) refilter() {
-	filter := ""
-	if m.sectionIdx < len(m.cfg.Sections) {
-		filter = m.cfg.Sections[m.sectionIdx].Filter
+	// The synthetic Hidden tab evaporates when its last MR is restored; fall
+	// back to the last configured section.
+	if m.onHiddenTab() && len(m.hiddenMRs()) == 0 {
+		m.sectionIdx = max(0, len(m.cfg.Sections)-1)
 	}
-	matched := section.Filter(filter, m.allMRs)
+	var matched []core.MR
+	if m.onHiddenTab() {
+		matched = m.hiddenMRs()
+	} else {
+		filter := ""
+		if m.sectionIdx < len(m.cfg.Sections) {
+			filter = m.cfg.Sections[m.sectionIdx].Filter
+		}
+		matched = section.Filter(filter, m.visibleMRs())
+	}
 	keysOrder, groups := section.GroupByTicket(matched)
 	var flat []core.MR
 	for _, k := range keysOrder {
@@ -551,18 +608,35 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor = max(0, len(m.mrs)-1)
 		return m, nil
 	case key.Matches(msg, m.keys.NextSection):
-		if len(m.cfg.Sections) > 0 {
-			m.sectionIdx = (m.sectionIdx + 1) % len(m.cfg.Sections)
+		if n := m.tabCount(); n > 0 {
+			m.sectionIdx = (m.sectionIdx + 1) % n
 			m.cursor = 0
 			m.refilter() // instant: re-filter the already-fetched list, no network
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.PrevSection):
-		if n := len(m.cfg.Sections); n > 0 {
+		if n := m.tabCount(); n > 0 {
 			m.sectionIdx = (m.sectionIdx - 1 + n) % n
 			m.cursor = 0
 			m.refilter()
 		}
+		return m, nil
+	case key.Matches(msg, m.keys.Hide):
+		mr := m.selected()
+		if mr == nil {
+			return m, nil
+		}
+		if m.onHiddenTab() {
+			delete(m.hidden, mr.Ref)
+			m.status = "restored " + mr.Ref
+		} else {
+			m.hidden[mr.Ref] = true
+			m.status = "hidden " + mr.Ref + " — restore from the Hidden tab (⌫ there)"
+		}
+		if err := core.SaveHidden(m.hiddenPath, m.hidden); err != nil {
+			m.status = "⚠ could not save hidden list: " + err.Error()
+		}
+		m.refilter()
 		return m, nil
 	case key.Matches(msg, m.keys.Refresh):
 		// Drop cached ticket statuses so the next expand refetches fresh data.
@@ -733,13 +807,25 @@ func (m Model) View() string {
 	}
 
 	// tabs, each with a count badge of how many MRs match it (once loaded).
+	// Hidden MRs are excluded from every configured section; when any exist,
+	// a synthetic Hidden tab appears at the end.
+	visible := m.visibleMRs()
 	var tabs []string
 	for i, s := range m.cfg.Sections {
 		label := s.Title
 		if m.loaded {
-			label = fmt.Sprintf("%s (%d)", label, len(section.Filter(s.Filter, m.allMRs)))
+			label = fmt.Sprintf("%s (%d)", label, len(section.Filter(s.Filter, visible)))
 		}
 		if i == m.sectionIdx {
+			label = m.styles.Header.Render("[" + label + "]")
+		} else {
+			label = m.styles.Footer.Render(" " + label + " ")
+		}
+		tabs = append(tabs, label)
+	}
+	if n := len(m.hiddenMRs()); n > 0 {
+		label := fmt.Sprintf("Hidden (%d)", n)
+		if m.onHiddenTab() {
 			label = m.styles.Header.Render("[" + label + "]")
 		} else {
 			label = m.styles.Footer.Render(" " + label + " ")
