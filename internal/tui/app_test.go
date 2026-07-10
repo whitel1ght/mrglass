@@ -995,3 +995,32 @@ func TestCopyReviewFailureSurfaces(t *testing.T) {
 		t.Error("a failed copy must not discard the pending review")
 	}
 }
+
+func TestHelpOverlayIsGroupedAndBordered(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 40
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m = u.(Model)
+	view := m.View()
+	for _, want := range []string{"Navigation", "Actions", "App", "mrglass"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("help overlay missing %q:\n%s", want, view)
+		}
+	}
+	// every full-help key should be listed
+	for _, want := range []string{"enter", "⌫", "claude review", "hide/unhide"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("help overlay missing binding %q", want)
+		}
+	}
+	// bordered (rounded box drawing char)
+	if !strings.ContainsAny(view, "╭╮╰╯─│") {
+		t.Errorf("help overlay should be bordered:\n%s", view)
+	}
+	// esc closes it
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = u.(Model)
+	if m.showHelp {
+		t.Error("esc should close the help overlay")
+	}
+}

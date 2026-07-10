@@ -597,11 +597,23 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// The help overlay is modal: ?, esc, or q close it; ctrl+c still quits;
+	// everything else is swallowed so stray keys don't act on the hidden list.
+	if m.showHelp {
+		switch {
+		case msg.Type == tea.KeyCtrlC:
+			return m, tea.Quit
+		case key.Matches(msg, m.keys.Help), msg.Type == tea.KeyEsc, msg.String() == "q":
+			m.showHelp = false
+		}
+		return m, nil
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
 	case key.Matches(msg, m.keys.Help):
-		m.showHelp = !m.showHelp
+		m.showHelp = true
 		return m, nil
 	case key.Matches(msg, m.keys.Down):
 		if m.cursor < len(m.mrs)-1 {
@@ -798,6 +810,50 @@ func (m Model) reviewBodyHeight() int {
 // reviewConfirmView shows the scrollable review plus a scroll indicator and the
 // post/discard prompt. The full review is scrollable (j/k, ↑/↓, PgUp/PgDn) so
 // structured sections past the first screen are reachable, not truncated.
+// helpOverlay renders a centered, bordered key reference grouped into
+// Navigation / Actions / App, with keys aligned per group.
+func (m Model) helpOverlay() string {
+	groups := []struct {
+		title    string
+		bindings []key.Binding
+	}{
+		{"Navigation", []key.Binding{m.keys.Up, m.keys.Down, m.keys.Top, m.keys.Bottom, m.keys.NextSection, m.keys.PrevSection}},
+		{"Actions", []key.Binding{m.keys.Expand, m.keys.Open, m.keys.OpenTicket, m.keys.OpenWork, m.keys.Review, m.keys.Triage, m.keys.Hide}},
+		{"App", []key.Binding{m.keys.Refresh, m.keys.ToggleAuto, m.keys.Help, m.keys.Quit}},
+	}
+
+	var sections []string
+	for _, g := range groups {
+		// Align the description column to the widest key in this group.
+		keyW := 0
+		for _, b := range g.bindings {
+			if w := lipgloss.Width(b.Help().Key); w > keyW {
+				keyW = w
+			}
+		}
+		var rows []string
+		rows = append(rows, m.styles.Accent.Render(g.title))
+		for _, b := range g.bindings {
+			h := b.Help()
+			key := m.styles.Header.Render(h.Key + strings.Repeat(" ", keyW-lipgloss.Width(h.Key)))
+			rows = append(rows, "  "+key+"  "+m.styles.Subtle.Render(h.Desc))
+		}
+		sections = append(sections, strings.Join(rows, "\n"))
+	}
+
+	title := m.styles.Header.Render("mrglass — keys")
+	footer := m.styles.Subtle.Render("? / esc to close")
+	body := strings.Join([]string{title, "", strings.Join(sections, "\n\n"), "", footer}, "\n")
+
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.styles.Accent.GetForeground()).
+		Padding(1, 3).
+		Render(body)
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, panel)
+}
+
 func (m Model) reviewConfirmView() string {
 	p := m.pendingReview
 	pct := fmt.Sprintf("%3.0f%%", m.reviewVP.ScrollPercent()*100)
@@ -817,7 +873,7 @@ func (m Model) View() string {
 		return "loading…"
 	}
 	if m.showHelp {
-		return m.help.FullHelpView(m.keys.FullHelp())
+		return m.helpOverlay()
 	}
 	if m.pendingReview != nil {
 		return m.reviewConfirmView()

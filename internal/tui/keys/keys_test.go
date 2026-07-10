@@ -34,3 +34,18 @@ func TestOpenWorkBinding(t *testing.T) {
 		t.Errorf("OpenWork should be w, got %v", k.OpenWork.Keys())
 	}
 }
+
+func TestShortHelpFitsNarrow(t *testing.T) {
+	sh := Default().ShortHelp()
+	var w int
+	for _, b := range sh {
+		h := b.Help()
+		w += len(h.Key) + 1 + len(h.Desc) + 3 // key + space + desc + separator
+	}
+	if w > 60 {
+		t.Errorf("short help ~%d cols; must stay compact (<=60) so it never crops", w)
+	}
+	if len(sh) < 4 {
+		t.Errorf("short help should still surface the core keys, got %d", len(sh))
+	}
+}

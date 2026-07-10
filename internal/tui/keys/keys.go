@@ -44,8 +44,24 @@ func Default() KeyMap {
 	}
 }
 
+// ShortHelp is the always-on bottom bar: a compact subset with terse labels so
+// it never overflows the terminal. The full descriptive list lives in FullHelp
+// (the '?' overlay). shortLabel overrides only the help text, not the keys.
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.NextSection, k.Expand, k.Open, k.OpenTicket, k.OpenWork, k.Review, k.Hide, k.Refresh, k.Help, k.Quit}
+	return []key.Binding{
+		shortLabel(k.Down, "j/k", "move"),
+		shortLabel(k.Expand, "enter", "open"),
+		shortLabel(k.Review, "c", "review"),
+		shortLabel(k.Hide, "⌫", "hide"),
+		shortLabel(k.Help, "?", "more"),
+	}
+}
+
+// shortLabel clones a binding with a terser help key/description for the
+// bottom bar, leaving the original (and its descriptive FullHelp text) intact.
+func shortLabel(b key.Binding, keyText, desc string) key.Binding {
+	b.SetHelp(keyText, desc)
+	return b
 }
 
 func (k KeyMap) FullHelp() [][]key.Binding {
