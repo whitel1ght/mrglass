@@ -224,13 +224,15 @@ func TestTabSwitchRefiltersInstantlyWithoutFetch(t *testing.T) {
 func TestEmptyBeforeLoadShowsLoadingNotNoMatches(t *testing.T) {
 	m := newTestModel()
 	m.width, m.height = 100, 30
-	// No fetch has returned yet -> must say loading, not "No matching MRs."
+	// No fetch has returned yet -> the splash shows a loading indicator, and
+	// must never claim "No matching MRs." (that's only for a loaded-but-empty
+	// section).
 	v := m.View()
 	if strings.Contains(v, "No matching MRs.") {
 		t.Error("before first load the empty state must not claim 'No matching MRs.'")
 	}
-	if !strings.Contains(v, "loading…") {
-		t.Errorf("before first load the list should show a loading indicator:\n%s", v)
+	if !strings.Contains(v, "loading") {
+		t.Errorf("before first load the view should show a loading indicator:\n%s", v)
 	}
 }
 
