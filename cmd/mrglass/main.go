@@ -24,7 +24,7 @@ func main() {
 	var (
 		showVersion = flag.Bool("version", false, "print version and exit")
 		configPath  = flag.String("config", defaultConfigPath(), "path to config.yaml")
-		statePath   = flag.String("state", ".mrglass-state.json", "path to snapshot state file")
+		statePath   = flag.String("state", defaultStatePath(), "path to snapshot state file")
 		noTriage    = flag.Bool("no-triage", false, "disable Claude triage entirely")
 		noReview    = flag.Bool("no-review", false, "disable the Claude MR-review hotkey")
 		gcFlag      = flag.Bool("gc", false, "remove worktrees of merged/closed MRs (with confirmation) and exit")
@@ -135,4 +135,25 @@ func defaultConfigPath() string {
 		return candidates[0] // none exist yet → the preferred create-here path
 	}
 	return "config.yaml"
+}
+
+// defaultStatePath returns where the per-user snapshot state (and its sibling
+// hidden-refs file) live. These are per-user, per-machine — they must never
+// land inside a project working tree. The XDG state dir (~/.local/state on
+// Linux/macOS) is the correct home. For back-compat, an existing legacy
+// .mrglass-state.json in the current directory is reused rather than orphaned.
+func defaultStatePath() string {
+	if _, err := os.Stat(".mrglass-state.json"); err == nil {
+		return ".mrglass-state.json"
+	}
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			base = filepath.Join(home, ".local", "state")
+		}
+	}
+	if base == "" {
+		return ".mrglass-state.json" // no home resolvable → last-resort CWD
+	}
+	return filepath.Join(base, "mrglass", "state.json")
 }

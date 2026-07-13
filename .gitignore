@@ -2,8 +2,8 @@
 /mrglass
 /dist/
 
-# local state
-.mrglass-state.json
+# local per-user state (snapshot + hidden MRs) — never commit
+.mrglass-state*.json
 
 # go
 *.test
