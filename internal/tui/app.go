@@ -965,6 +965,10 @@ func (m Model) View() string {
 	if m.pendingReview != nil {
 		return m.reviewConfirmView()
 	}
+	// Startup: a centered logo until the first fetch returns (or an error).
+	if m.splashActive() {
+		return m.splashView()
+	}
 
 	// Status tabs, each with a count badge (once loaded). Hidden MRs are
 	// excluded from every configured section; badges also reflect the active

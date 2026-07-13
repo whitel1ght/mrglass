@@ -1170,3 +1170,48 @@ func TestActiveProjectTabUsesWarnColor(t *testing.T) {
 		t.Error("Header and Warn must render as distinct colors")
 	}
 }
+
+func TestSplashShownBeforeLoadAndGoneAfter(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 40
+	// Before any fetch result: the splash logo (tagline) + a loading line.
+	v := m.View()
+	if !strings.Contains(v, "your open merge requests") {
+		t.Errorf("splash should show the logo tagline before load:\n%s", v)
+	}
+	if !strings.Contains(v, "loading") {
+		t.Errorf("splash should indicate loading:\n%s", v)
+	}
+	// After MRs arrive, the dashboard replaces the splash.
+	item := mr("g/p!1", "success")
+	item.Role = core.RoleReviewRequested
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{item}}))
+	m = u.(Model)
+	if strings.Contains(m.View(), "your open merge requests") {
+		t.Errorf("splash tagline should be gone once loaded:\n%s", m.View())
+	}
+}
+
+func TestSplashCompactFallbackOnNarrowTerminal(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 30, 40 // narrower than the logo art
+	v := m.View()
+	for _, ln := range strings.Split(v, "\n") {
+		if lipgloss.Width(ln) > 30 {
+			t.Errorf("narrow splash line exceeds width: %q (%d)", ln, lipgloss.Width(ln))
+		}
+	}
+	if !strings.Contains(v, "mrglass") || !strings.Contains(v, "loading") {
+		t.Errorf("compact fallback should still show name + loading:\n%s", v)
+	}
+}
+
+func TestSplashBypassedByErrorAndHelp(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 40
+	// help overlay wins over splash
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	if strings.Contains(u.(Model).View(), "your open merge requests") {
+		t.Error("help overlay should bypass the splash")
+	}
+}
