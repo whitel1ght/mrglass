@@ -103,7 +103,11 @@ func main() {
 			m = m.WithJiraDisabled("status off: set JIRA_EMAIL + JIRA_API_TOKEN")
 		}
 	}
-	prog := tea.NewProgram(m, tea.WithAltScreen())
+	// WithReportFocus: refresh + highlight what changed when the terminal
+	// regains focus (returning from another tmux tab / the browser). Best-effort
+	// — silently no-ops on terminals/tmux that don't report focus; the r key and
+	// auto-refresh tick remain the baseline.
+	prog := tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus())
 	if _, err := prog.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

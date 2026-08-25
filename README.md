@@ -16,6 +16,12 @@ background auto-refresh, and deep **Claude** integration:
   template) and see inline Jira status when you expand an MR.
 - **Hide noise** — `backspace` hides an MR into a **Hidden** tab (persisted,
   fully muted: no notifications, no triage); `backspace` there restores it.
+- **What's new** — returning to mrglass (or pressing `r`) highlights MRs that
+  changed since you last looked: a `●` gutter marker + bold title, an `N new`
+  footer count, and a `●` on the status/project tabs that contain the changes.
+  Viewing an MR (expand/`o`) clears its mark; `S` marks all seen. For instant
+  refresh on tab-switch inside tmux, add `set -g focus-events on` to your
+  `~/.tmux.conf` (then detach/reattach).
 
 ## Install
 

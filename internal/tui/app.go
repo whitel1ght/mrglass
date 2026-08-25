@@ -106,6 +106,11 @@ type Model struct {
 	hiddenPath string
 
 	projectFilter string // "" = All; else a project path (second tab axis)
+
+	// changed tracks MRs that changed since the user last looked (session-only,
+	// ref -> KindNew/KindChanged). Cleared per-ref when the user views the MR
+	// (expand/open) or all at once with the "mark all seen" key.
+	changed map[string]core.ChangeKind
 }
 
 // ticketTTL is how long a fetched ticket stays fresh before an expand refetches.
@@ -153,6 +158,7 @@ func New(cfg config.Config, p provider.Provider, me string, az analyze.Analyzer,
 		busy:       map[string]string{},
 		hidden:     hidden,
 		hiddenPath: hiddenPath,
+		changed:    map[string]core.ChangeKind{},
 	}
 	if hiddenErr != nil {
 		m.status = "⚠ " + hiddenErr.Error()
@@ -222,6 +228,36 @@ func projectLabels(projects []string) []string {
 		}
 	}
 	return out
+}
+
+// sectionHasChanged reports whether any changed MR (within the active project
+// scope) matches the given section filter — used to dot a status tab.
+func (m Model) sectionHasChanged(filter string) bool {
+	for _, mr := range section.Filter(filter, m.projectScoped(m.visibleMRs())) {
+		if _, ok := m.changed[mr.Ref]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// projectHasChanged reports whether any changed, visible MR belongs to the
+// given project path ("" = any project) — used to dot a project tab.
+func (m Model) projectHasChanged(project string) bool {
+	for _, mr := range m.visibleMRs() {
+		if _, ok := m.changed[mr.Ref]; ok && (project == "" || mr.Project() == project) {
+			return true
+		}
+	}
+	return false
+}
+
+// tabDot returns an amber "● " prefix when has is true, else "".
+func (m Model) tabDot(has bool) string {
+	if has {
+		return m.styles.Warn.Render("●") + " "
+	}
+	return ""
 }
 
 // projectScoped filters a list to the active project (no-op when All).
@@ -457,6 +493,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// reschedule the metronome AND fetch; the two are independent
 		return m, tea.Batch(m.tickCmd(), m.startBusy("fetch", "refreshing"), m.fetchCmd())
 
+	case tea.FocusMsg:
+		// Regained focus (returned to the terminal): quietly refresh so any
+		// changes since we last looked get highlighted. Best-effort — focus
+		// events don't fire on every terminal/tmux, so r + the tick remain the
+		// baseline. BlurMsg is intentionally ignored.
+		return m, tea.Batch(m.startBusy("fetch", "refreshing"), m.fetchCmd())
+
 	case spinner.TickMsg:
 		if len(m.busy) == 0 {
 			return m, nil // idle: let the animation stop
@@ -552,7 +595,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.applyMRs(res.MRs)
 		m.loaded = true
+		// Highlight what changed since the last look: union this fetch's changes
+		// into the set (gone MRs are Kind==gone; skip those, and prune any
+		// changed-ref that vanished from the fetched list).
+		present := make(map[string]bool, len(res.MRs))
+		for _, x := range res.MRs {
+			present[x.Ref] = true
+		}
+		for _, c := range res.Changes {
+			if c.Kind != core.KindGone {
+				m.changed[c.Ref] = c.Kind
+			}
+		}
+		for ref := range m.changed {
+			if !present[ref] {
+				delete(m.changed, ref)
+			}
+		}
 		m.status = fmt.Sprintf("%d MRs · refreshed %s", len(res.MRs), time.Now().Format("15:04"))
+		if n := len(m.changed); n > 0 {
+			m.status += fmt.Sprintf(" · %d new", n)
+		}
 		if res.Warning != "" {
 			m.status += "  ⚠ " + res.Warning
 		}
@@ -762,6 +825,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				delete(m.expanded, mr.Ref)
 			} else {
 				m.expanded[mr.Ref] = true
+				delete(m.changed, mr.Ref) // viewed it → clear the "changed" highlight
 				// Lazily fetch the Jira ticket status for the newly-expanded MR.
 				if cmd := m.maybeFetchTicket(*mr); cmd != nil {
 					return m, cmd
@@ -771,8 +835,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Open):
 		if mr := m.selected(); mr != nil {
+			delete(m.changed, mr.Ref) // viewed it → clear the "changed" highlight
 			return m, openURL(mr.URL)
 		}
+		return m, nil
+	case key.Matches(msg, m.keys.SeenAll):
+		m.changed = map[string]core.ChangeKind{}
+		m.status = "marked all seen"
 		return m, nil
 	case key.Matches(msg, m.keys.OpenTicket):
 		mr := m.selected()
@@ -905,7 +974,7 @@ func (m Model) helpOverlay() string {
 		bindings []key.Binding
 	}{
 		{"Navigation", []key.Binding{m.keys.Up, m.keys.Down, m.keys.Top, m.keys.Bottom, m.keys.NextSection, m.keys.PrevSection, m.keys.NextProject, m.keys.PrevProject}},
-		{"Actions", []key.Binding{m.keys.Expand, m.keys.Open, m.keys.OpenTicket, m.keys.OpenWork, m.keys.Review, m.keys.Triage, m.keys.Hide}},
+		{"Actions", []key.Binding{m.keys.Expand, m.keys.Open, m.keys.OpenTicket, m.keys.OpenWork, m.keys.Review, m.keys.Triage, m.keys.Hide, m.keys.SeenAll}},
 		{"App", []key.Binding{m.keys.Refresh, m.keys.ToggleAuto, m.keys.Help, m.keys.Quit}},
 	}
 
@@ -986,7 +1055,7 @@ func (m Model) View() string {
 		} else {
 			label = m.styles.Footer.Render(" " + label + " ")
 		}
-		tabs = append(tabs, label)
+		tabs = append(tabs, m.tabDot(m.sectionHasChanged(s.Filter))+label)
 	}
 	if n := len(m.hiddenMRs()); n > 0 {
 		label := fmt.Sprintf("Hidden (%d)", n)
@@ -1008,10 +1077,12 @@ func (m Model) View() string {
 		for i, lbl := range labels {
 			if values[i] == m.projectFilter {
 				// Active project tab is amber (Warn) so the project axis reads
-				// distinctly from the accent-blue status tabs above it.
+				// distinctly from the accent-blue status tabs above it. (No dot
+				// here — it'd collide with the amber label, and you're already
+				// looking at this project.)
 				ptabs = append(ptabs, m.styles.Warn.Render("["+lbl+"]"))
 			} else {
-				ptabs = append(ptabs, m.styles.Footer.Render(" "+lbl+" "))
+				ptabs = append(ptabs, m.tabDot(m.projectHasChanged(values[i]))+m.styles.Footer.Render(" "+lbl+" "))
 			}
 		}
 		hint := m.styles.Subtle.Render("  [/] project")
@@ -1039,16 +1110,27 @@ func (m Model) View() string {
 			lastTicket = mr.TicketKey
 		}
 		open := m.expanded[mr.Ref]
-		marker := "▸ "
-		if open {
-			marker = "▾ "
+		kind, isChanged := m.changed[mr.Ref]
+		var marker string
+		switch {
+		case isChanged && kind == core.KindNew:
+			// Newly-appeared MR: bright accent dot.
+			marker = m.styles.Accent.Render("● ")
+		case isChanged:
+			// Changed while present: amber dot.
+			marker = m.styles.Warn.Render("● ")
+		default:
+			marker = "▸ "
+			if open {
+				marker = "▾ "
+			}
+			if i == m.cursor {
+				marker = m.styles.Accent.Render(marker)
+			} else {
+				marker = m.styles.Subtle.Render(marker)
+			}
 		}
-		if i == m.cursor {
-			marker = m.styles.Accent.Render(marker)
-		} else {
-			marker = m.styles.Subtle.Render(marker)
-		}
-		rv := statusline.RowView{MR: mr, HasAdvice: m.advice[mr.Ref] != "", ApprovalsRequired: mr.ApprovalsRequired}
+		rv := statusline.RowView{MR: mr, HasAdvice: m.advice[mr.Ref] != "", ApprovalsRequired: mr.ApprovalsRequired, Changed: isChanged}
 		rows = append(rows, marker+statusline.Render(m.cfg.Statusline, m.styles, rv, rowWidth, i == m.cursor))
 		if open {
 			rows = append(rows, detailpane.Render(m.styles, mr, m.advice[mr.Ref], m.ticketView(mr)))
