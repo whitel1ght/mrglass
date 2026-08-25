@@ -1351,3 +1351,78 @@ func TestFocusMsgTriggersFetch(t *testing.T) {
 		t.Error("FocusMsg should trigger a refresh command")
 	}
 }
+
+// helper: extract the status-tab line and the project-tab line from a view.
+func headerLines(v string) (statusRow, projectRow string) {
+	for _, ln := range strings.Split(v, "\n") {
+		if strings.Contains(ln, "Needs My Review") {
+			statusRow = ln
+		}
+		if strings.Contains(ln, "[/]") {
+			projectRow = ln
+		}
+	}
+	return
+}
+
+func TestStatusTabShowsDotWhenSectionHasNew(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+	m := newTestModel()
+	m.width, m.height = 140, 30
+	// An MR in section "Mine · Needs approval" (mine, no approvals). We're on
+	// section 0 (review_requested), so the change is in a DIFFERENT tab.
+	mine := mr("g/p!9", "success")
+	mine.Role, mine.Title = core.RoleMine, "mine one"
+	m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{mine}}))
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{
+		MRs:     []core.MR{mine},
+		Changes: []core.Change{{Ref: "g/p!9", Kind: core.KindChanged}},
+	}))
+	m = u.(Model)
+	statusRow, _ := headerLines(m.View())
+	// "Mine · Needs approval" contains a changed MR -> its tab shows a dot.
+	// Grab the segment for that tab.
+	if !strings.Contains(statusRow, "●") {
+		t.Errorf("a status tab with a changed MR should show a ● dot:\n%s", statusRow)
+	}
+}
+
+func TestProjectTabShowsDotWhenProjectHasNew(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+	m := newTestModel()
+	m.width, m.height = 140, 30
+	a := mr("acme/api!1", "success")
+	a.Role, a.Title = core.RoleReviewRequested, "api one"
+	b := mr("acme/web!2", "success")
+	b.Role, b.Title = core.RoleReviewRequested, "web one"
+	m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a, b}}))
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{
+		MRs:     []core.MR{a, b},
+		Changes: []core.Change{{Ref: "acme/web!2", Kind: core.KindChanged}},
+	}))
+	m = u.(Model)
+	_, projectRow := headerLines(m.View())
+	if projectRow == "" {
+		t.Fatalf("expected a project row:\n%s", m.View())
+	}
+	if !strings.Contains(projectRow, "●") {
+		t.Errorf("a project tab with a changed MR should show a ● dot:\n%s", projectRow)
+	}
+}
+
+func TestTabDotGoneAfterSeenAll(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+	m := newTestModel()
+	m.width, m.height = 140, 30
+	mine := mr("g/p!9", "success")
+	mine.Role = core.RoleMine
+	m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{mine}}))
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{mine},
+		Changes: []core.Change{{Ref: "g/p!9", Kind: core.KindChanged}}}))
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("S")})
+	m = u.(Model)
+	if strings.Contains(m.View(), "●") {
+		t.Errorf("after S, no tab dot should remain:\n%s", m.View())
+	}
+}

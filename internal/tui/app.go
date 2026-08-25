@@ -230,6 +230,36 @@ func projectLabels(projects []string) []string {
 	return out
 }
 
+// sectionHasChanged reports whether any changed MR (within the active project
+// scope) matches the given section filter — used to dot a status tab.
+func (m Model) sectionHasChanged(filter string) bool {
+	for _, mr := range section.Filter(filter, m.projectScoped(m.visibleMRs())) {
+		if _, ok := m.changed[mr.Ref]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// projectHasChanged reports whether any changed, visible MR belongs to the
+// given project path ("" = any project) — used to dot a project tab.
+func (m Model) projectHasChanged(project string) bool {
+	for _, mr := range m.visibleMRs() {
+		if _, ok := m.changed[mr.Ref]; ok && (project == "" || mr.Project() == project) {
+			return true
+		}
+	}
+	return false
+}
+
+// tabDot returns an amber "● " prefix when has is true, else "".
+func (m Model) tabDot(has bool) string {
+	if has {
+		return m.styles.Warn.Render("●") + " "
+	}
+	return ""
+}
+
 // projectScoped filters a list to the active project (no-op when All).
 func (m Model) projectScoped(mrs []core.MR) []core.MR {
 	if m.projectFilter == "" {
@@ -1025,7 +1055,7 @@ func (m Model) View() string {
 		} else {
 			label = m.styles.Footer.Render(" " + label + " ")
 		}
-		tabs = append(tabs, label)
+		tabs = append(tabs, m.tabDot(m.sectionHasChanged(s.Filter))+label)
 	}
 	if n := len(m.hiddenMRs()); n > 0 {
 		label := fmt.Sprintf("Hidden (%d)", n)
@@ -1047,10 +1077,12 @@ func (m Model) View() string {
 		for i, lbl := range labels {
 			if values[i] == m.projectFilter {
 				// Active project tab is amber (Warn) so the project axis reads
-				// distinctly from the accent-blue status tabs above it.
+				// distinctly from the accent-blue status tabs above it. (No dot
+				// here — it'd collide with the amber label, and you're already
+				// looking at this project.)
 				ptabs = append(ptabs, m.styles.Warn.Render("["+lbl+"]"))
 			} else {
-				ptabs = append(ptabs, m.styles.Footer.Render(" "+lbl+" "))
+				ptabs = append(ptabs, m.tabDot(m.projectHasChanged(values[i]))+m.styles.Footer.Render(" "+lbl+" "))
 			}
 		}
 		hint := m.styles.Subtle.Render("  [/] project")
