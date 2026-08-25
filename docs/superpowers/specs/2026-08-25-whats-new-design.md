@@ -60,3 +60,17 @@ view. Footer count optional, deferred.
 - `S` clears all.
 - a ref absent from a later fetch is dropped from m.changed.
 - tea.FocusMsg returns a fetch command.
+
+## Addendum (2026-08-25): per-tab "has new" indicator
+
+Both tab rows mark tabs that contain changed MRs, so the user can spot which
+tab/project has new activity without visiting each:
+- Status tabs: a `●` (Warn/amber) prefix when any MR in `m.changed` matches
+  that section's filter (within the active project scope).
+- Project tabs: a `●` prefix on an INACTIVE project tab when any changed MR
+  belongs to that project (`All` = any). The active project tab omits the dot
+  (already amber; you're viewing it).
+
+Computed at render time from the existing `changed` set — no new state. Cleared
+by the same view/seen paths. Tests: status tab dots for an off-screen section
+change; project tab dots for an off-screen project change; dot gone after `S`.
