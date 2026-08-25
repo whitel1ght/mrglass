@@ -1217,3 +1217,137 @@ func TestSplashBypassedByErrorAndHelp(t *testing.T) {
 		t.Error("help overlay should bypass the splash")
 	}
 }
+
+// changeFor builds a fetch result carrying MRs plus a change per given ref.
+func fetchWithChanges(mrs []core.MR, changes []core.Change) fetchResultMsg {
+	return fetchResultMsg(watch.FetchResult{MRs: mrs, Changes: changes})
+}
+
+func rrMR(ref string) core.MR {
+	m := mr(ref, "success")
+	m.Role = core.RoleReviewRequested
+	m.Title = "title " + ref
+	return m
+}
+
+func TestChangedSetUnionedFromFetch(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	// First fetch: establishes baseline, Changes empty -> nothing highlighted.
+	u, _ := m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1")}, nil))
+	m = u.(Model)
+	if len(m.changed) != 0 {
+		t.Errorf("first fetch should highlight nothing, got %v", m.changed)
+	}
+	// Second fetch reports a change on !1.
+	u, _ = m.Update(fetchWithChanges(
+		[]core.MR{rrMR("g/p!1")},
+		[]core.Change{{Ref: "g/p!1", Kind: core.KindChanged}},
+	))
+	m = u.(Model)
+	if m.changed["g/p!1"] != core.KindChanged {
+		t.Errorf("changed set should record g/p!1 as KindChanged, got %v", m.changed)
+	}
+}
+
+func TestChangedRowShowsMarkerAndBoldTitle(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	u, _ := m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1")}, nil))
+	m = u.(Model)
+	// no change yet: normal disclosure marker, no dot
+	if strings.Contains(m.View(), "●") {
+		t.Errorf("unchanged row should not show a change dot:\n%s", m.View())
+	}
+	u, _ = m.Update(fetchWithChanges(
+		[]core.MR{rrMR("g/p!1")},
+		[]core.Change{{Ref: "g/p!1", Kind: core.KindChanged}},
+	))
+	m = u.(Model)
+	if !strings.Contains(m.View(), "●") {
+		t.Errorf("changed row should show a ● marker:\n%s", m.View())
+	}
+}
+
+func TestExpandClearsChangedForThatRef(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1")}, nil))
+	u, _ := m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1")},
+		[]core.Change{{Ref: "g/p!1", Kind: core.KindNew}}))
+	m = u.(Model)
+	if _, ok := m.changed["g/p!1"]; !ok {
+		t.Fatal("precondition: g/p!1 should be changed")
+	}
+	// cursor is on row 0; expand it -> clears
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if _, ok := m.changed["g/p!1"]; ok {
+		t.Error("expanding an MR should clear its changed highlight")
+	}
+	// collapsing again must NOT re-add it
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if _, ok := m.changed["g/p!1"]; ok {
+		t.Error("collapse must not re-flag the MR as changed")
+	}
+}
+
+func TestOpenClearsChanged(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1")}, nil))
+	u, _ := m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1")},
+		[]core.Change{{Ref: "g/p!1", Kind: core.KindChanged}}))
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = u.(Model)
+	if _, ok := m.changed["g/p!1"]; ok {
+		t.Error("opening an MR in browser should clear its changed highlight")
+	}
+}
+
+func TestSeenAllKeyClearsEverything(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1"), rrMR("g/p!2")}, nil))
+	u, _ := m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1"), rrMR("g/p!2")},
+		[]core.Change{{Ref: "g/p!1", Kind: core.KindNew}, {Ref: "g/p!2", Kind: core.KindChanged}}))
+	m = u.(Model)
+	if len(m.changed) != 2 {
+		t.Fatalf("precondition: 2 changed, got %d", len(m.changed))
+	}
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("S")})
+	m = u.(Model)
+	if len(m.changed) != 0 {
+		t.Errorf("S should clear all changed highlights, got %v", m.changed)
+	}
+}
+
+func TestGoneRefDroppedFromChanged(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1"), rrMR("g/p!2")}, nil))
+	u, _ := m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1"), rrMR("g/p!2")},
+		[]core.Change{{Ref: "g/p!1", Kind: core.KindChanged}, {Ref: "g/p!2", Kind: core.KindChanged}}))
+	m = u.(Model)
+	// !2 disappears from the fetched list
+	u, _ = m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1")}, nil))
+	m = u.(Model)
+	if _, ok := m.changed["g/p!2"]; ok {
+		t.Error("a ref gone from the fetched list should drop from changed")
+	}
+}
+
+func TestFocusMsgTriggersFetch(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 30
+	m.Update(fetchWithChanges([]core.MR{rrMR("g/p!1")}, nil))
+	// provider is nil in newTestModel, but FocusMsg should still return a fetch cmd.
+	_, cmd := m.Update(tea.FocusMsg{})
+	if cmd == nil {
+		t.Error("FocusMsg should trigger a refresh command")
+	}
+}

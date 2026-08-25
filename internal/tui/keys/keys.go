@@ -19,6 +19,7 @@ type KeyMap struct {
 	Hide        key.Binding
 	NextProject key.Binding
 	PrevProject key.Binding
+	SeenAll     key.Binding
 	ToggleAuto  key.Binding
 	Help        key.Binding
 	Quit        key.Binding
@@ -42,6 +43,7 @@ func Default() KeyMap {
 		Hide:        key.NewBinding(key.WithKeys("backspace"), key.WithHelp("⌫", "hide/unhide MR")),
 		NextProject: key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next project")),
 		PrevProject: key.NewBinding(key.WithKeys("["), key.WithHelp("[", "prev project")),
+		SeenAll:     key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "mark all seen")),
 		ToggleAuto:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "toggle auto-triage")),
 		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),

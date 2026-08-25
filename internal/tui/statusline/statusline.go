@@ -19,6 +19,7 @@ type RowView struct {
 	MR                core.MR
 	HasAdvice         bool
 	ApprovalsRequired int
+	Changed           bool // changed since last look → title rendered bold
 }
 
 // Render produces one MR row sized to width. Left group is left-aligned; right
@@ -152,6 +153,10 @@ func renderSegment(s config.Segment, st theme.Styles, rv RowView, base lipgloss.
 	case "text":
 		text = truncate(fieldString(s.Source, mr), s.MaxWidth)
 		style = base
+		// A row that changed since the user last looked gets its title bolded.
+		if rv.Changed && s.Source == "title" {
+			style = style.Bold(true)
+		}
 	case "ci":
 		if sym, ok := s.Symbols[mr.CI]; ok {
 			text = sym
