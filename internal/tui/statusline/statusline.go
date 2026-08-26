@@ -153,9 +153,11 @@ func renderSegment(s config.Segment, st theme.Styles, rv RowView, base lipgloss.
 	case "text":
 		text = truncate(fieldString(s.Source, mr), s.MaxWidth)
 		style = base
-		// A row that changed since the user last looked gets its title bolded.
+		// A title that changed since the user last looked is recolored (accent)
+		// rather than bolded — bold is reserved for the cursor row's selection,
+		// so the two signals never collide.
 		if rv.Changed && s.Source == "title" {
-			style = style.Bold(true)
+			style = st.Accent
 		}
 	case "ci":
 		if sym, ok := s.Symbols[mr.CI]; ok {

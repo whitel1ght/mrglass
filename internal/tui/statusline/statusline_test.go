@@ -264,3 +264,20 @@ func TestStatesSelectedOverridesThemeBar(t *testing.T) {
 		t.Errorf("selected state style not applied: %q", line)
 	}
 }
+
+func TestChangedTitleIsColoredNotBold(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
+	st := theme.BuildStyles(theme.Get("tokyonight"))
+	seg := config.Segment{Type: "text", Source: "title"}
+	rv := RowView{MR: core.MR{Title: "hello"}, Changed: true}
+	got := renderSegment(seg, st, rv, st.Base)
+	// Changed title must be colored (Accent), distinct from the plain base…
+	if got == st.Base.Inline(true).Render("hello") {
+		t.Errorf("changed title should be recolored, got plain base:\n%q", got)
+	}
+	// …and must NOT be bold, so bold stays exclusive to the cursor selection.
+	if strings.Contains(got, "\x1b[1m") || strings.Contains(got, ";1m") || strings.Contains(got, "[1;") {
+		t.Errorf("changed title must not be bold (bold is the cursor's signal):\n%q", got)
+	}
+}
