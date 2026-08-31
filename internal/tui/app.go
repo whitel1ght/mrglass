@@ -111,6 +111,11 @@ type Model struct {
 	// ref -> KindNew/KindChanged). Cleared per-ref when the user views the MR
 	// (expand/open) or all at once with the "mark all seen" key.
 	changed map[string]core.ChangeKind
+	// seenAt records the MR.UpdatedAt the user acknowledged when they last
+	// viewed a ref. A fetch only re-flags a ref if its UpdatedAt is newer than
+	// this — so a stale/straggler refresh can't resurrect a just-viewed MR,
+	// but a genuine later change still surfaces ("sticky until it changes").
+	seenAt map[string]time.Time
 }
 
 // ticketTTL is how long a fetched ticket stays fresh before an expand refetches.
@@ -159,6 +164,7 @@ func New(cfg config.Config, p provider.Provider, me string, az analyze.Analyzer,
 		hidden:     hidden,
 		hiddenPath: hiddenPath,
 		changed:    map[string]core.ChangeKind{},
+		seenAt:     map[string]time.Time{},
 	}
 	if hiddenErr != nil {
 		m.status = "⚠ " + hiddenErr.Error()
@@ -228,6 +234,14 @@ func projectLabels(projects []string) []string {
 		}
 	}
 	return out
+}
+
+// markSeen acknowledges an MR the user just viewed: clears its "changed"
+// highlight and records the state (UpdatedAt) seen, so a stale refresh can't
+// re-flag it while a genuine later change still can.
+func (m *Model) markSeen(mr core.MR) {
+	delete(m.changed, mr.Ref)
+	m.seenAt[mr.Ref] = mr.UpdatedAt
 }
 
 // sectionHasChanged reports whether any changed MR (within the active project
@@ -599,17 +613,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// into the set (gone MRs are Kind==gone; skip those, and prune any
 		// changed-ref that vanished from the fetched list).
 		present := make(map[string]bool, len(res.MRs))
+		updatedAt := make(map[string]time.Time, len(res.MRs))
 		for _, x := range res.MRs {
 			present[x.Ref] = true
+			updatedAt[x.Ref] = x.UpdatedAt
 		}
 		for _, c := range res.Changes {
-			if c.Kind != core.KindGone {
-				m.changed[c.Ref] = c.Kind
+			if c.Kind == core.KindGone {
+				continue
 			}
+			// Suppress refs the user already viewed unless the MR genuinely moved
+			// on since — its UpdatedAt is newer than what was acknowledged. This
+			// stops a stale/straggler refresh from resurrecting a just-viewed MR.
+			if seen, ok := m.seenAt[c.Ref]; ok && !updatedAt[c.Ref].After(seen) {
+				continue
+			}
+			delete(m.seenAt, c.Ref) // genuine new change → require a fresh view
+			m.changed[c.Ref] = c.Kind
 		}
 		for ref := range m.changed {
 			if !present[ref] {
 				delete(m.changed, ref)
+			}
+		}
+		for ref := range m.seenAt {
+			if !present[ref] {
+				delete(m.seenAt, ref)
 			}
 		}
 		m.status = fmt.Sprintf("%d MRs · refreshed %s", len(res.MRs), time.Now().Format("15:04"))
@@ -825,7 +854,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				delete(m.expanded, mr.Ref)
 			} else {
 				m.expanded[mr.Ref] = true
-				delete(m.changed, mr.Ref) // viewed it → clear the "changed" highlight
+				m.markSeen(*mr) // viewed it → clear highlight, acknowledge its state
 				// Lazily fetch the Jira ticket status for the newly-expanded MR.
 				if cmd := m.maybeFetchTicket(*mr); cmd != nil {
 					return m, cmd
@@ -835,11 +864,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Open):
 		if mr := m.selected(); mr != nil {
-			delete(m.changed, mr.Ref) // viewed it → clear the "changed" highlight
+			m.markSeen(*mr) // viewed it → clear highlight, acknowledge its state
 			return m, openURL(mr.URL)
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.SeenAll):
+		// Acknowledge every currently-changed MR at its present state, so a
+		// stale refresh can't resurrect any of them.
+		for _, mr := range m.allMRs {
+			if _, ok := m.changed[mr.Ref]; ok {
+				m.seenAt[mr.Ref] = mr.UpdatedAt
+			}
+		}
 		m.changed = map[string]core.ChangeKind{}
 		m.status = "marked all seen"
 		return m, nil

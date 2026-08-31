@@ -74,3 +74,16 @@ tab/project has new activity without visiting each:
 Computed at render time from the existing `changed` set — no new state. Cleared
 by the same view/seen paths. Tests: status tab dots for an off-screen section
 change; project tab dots for an off-screen project change; dot gone after `S`.
+
+## Addendum (2026-08-31): sticky "seen" (fix stale-refresh resurrection)
+
+Bug: after viewing an MR (expand/open) cleared its highlight, a subsequent
+refresh (auto-tick/focus) that re-reported the same change would re-flag it —
+so the tab dot came back even though the user had seen it.
+
+Fix: a `seenAt map[string]time.Time` records the MR.UpdatedAt acknowledged at
+view time (via `markSeen`). The fetch union skips a ref whose current
+UpdatedAt is not newer than `seenAt[ref]` — a stale/straggler refresh can't
+resurrect a just-viewed MR, but a genuine later change (newer UpdatedAt)
+clears seenAt and re-flags. `S` acknowledges all currently-changed MRs at
+their present state. Gone refs drop from both maps.

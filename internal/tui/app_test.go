@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -1424,5 +1425,87 @@ func TestTabDotGoneAfterSeenAll(t *testing.T) {
 	m = u.(Model)
 	if strings.Contains(m.View(), "●") {
 		t.Errorf("after S, no tab dot should remain:\n%s", m.View())
+	}
+}
+
+func TestSeenMRNotReflaggedByStaleRefresh(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 20
+	// An MR with a fixed UpdatedAt.
+	base := time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC)
+	a := mr("ecfx/ecfx-admin!252", "success")
+	a.Role, a.Title, a.UpdatedAt = core.RoleReviewRequested, "admin one", base
+
+	m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a}}))
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a},
+		Changes: []core.Change{{Ref: a.Ref, Kind: core.KindChanged}}}))
+	m = u.(Model)
+	if len(m.changed) != 1 {
+		t.Fatalf("precondition: expected 1 changed, got %v", m.changed)
+	}
+
+	// View it (enter -> expand): acknowledges its current state.
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if len(m.changed) != 0 {
+		t.Fatalf("expand should clear changed, got %v", m.changed)
+	}
+
+	// A stale/straggler refresh re-reports the SAME change (UpdatedAt unchanged).
+	// It must NOT re-flag — the user already saw this state.
+	u, _ = m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a},
+		Changes: []core.Change{{Ref: a.Ref, Kind: core.KindChanged}}}))
+	m = u.(Model)
+	if len(m.changed) != 0 {
+		t.Errorf("a refresh must NOT re-flag an already-viewed MR whose state didn't advance: %v", m.changed)
+	}
+	if m.projectHasChanged("ecfx/ecfx-admin") {
+		t.Error("project tab dot must be gone after viewing (stale refresh must not resurrect it)")
+	}
+}
+
+func TestSeenMRReflaggedWhenItChangesAgain(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 20
+	base := time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC)
+	a := mr("ecfx/ecfx-admin!252", "success")
+	a.Role, a.Title, a.UpdatedAt = core.RoleReviewRequested, "admin one", base
+
+	m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a}}))
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a},
+		Changes: []core.Change{{Ref: a.Ref, Kind: core.KindChanged}}}))
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // view/acknowledge
+	m = u.(Model)
+
+	// Now it genuinely changes AGAIN: newer UpdatedAt.
+	a2 := a
+	a2.UpdatedAt = base.Add(1 * time.Hour)
+	u, _ = m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a2},
+		Changes: []core.Change{{Ref: a2.Ref, Kind: core.KindChanged}}}))
+	m = u.(Model)
+	if _, ok := m.changed[a.Ref]; !ok {
+		t.Errorf("a genuine later change (newer UpdatedAt) should re-flag the MR, got %v", m.changed)
+	}
+}
+
+func TestSeenAllSuppressesStaleRefresh(t *testing.T) {
+	m := newTestModel()
+	m.width, m.height = 120, 20
+	base := time.Date(2026, 8, 31, 10, 0, 0, 0, time.UTC)
+	a := mr("g/p!1", "success")
+	a.Role, a.UpdatedAt = core.RoleReviewRequested, base
+	m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a}}))
+	u, _ := m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a},
+		Changes: []core.Change{{Ref: a.Ref, Kind: core.KindChanged}}}))
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("S")}) // mark all seen
+	m = u.(Model)
+	// stale refresh re-reports the same change: must stay cleared
+	u, _ = m.Update(fetchResultMsg(watch.FetchResult{MRs: []core.MR{a},
+		Changes: []core.Change{{Ref: a.Ref, Kind: core.KindChanged}}}))
+	m = u.(Model)
+	if len(m.changed) != 0 {
+		t.Errorf("after S, a stale refresh must not resurrect: %v", m.changed)
 	}
 }
